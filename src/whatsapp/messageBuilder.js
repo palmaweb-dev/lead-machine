@@ -3,6 +3,15 @@ import { OpenAI } from 'openai';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export class MessageBuilder {
+
+  normalizarTextoWhatsApp(texto) {
+    if (!texto) return texto;
+
+    return texto.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_match, label, url) => {
+      const labelLimpo = label.trim();
+      return labelLimpo === url ? url : `${labelLimpo}: ${url}`;
+    });
+  }
   
   construirMensagemInicial(lead, diagnostico) {
     const primeiroNome = lead.nome_empresa.split(' ')[0];
@@ -61,7 +70,7 @@ Não use listas, não use asteriscos excessivos.`;
       messages: [{ role: 'user', content: prompt }]
     });
 
-    return response.choices[0].message.content;
+    return this.normalizarTextoWhatsApp(response.choices[0].message.content);
   }
 
   async classificarInteresse(mensagem) {
