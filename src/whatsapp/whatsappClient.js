@@ -124,38 +124,58 @@ export class WhatsAppClient {
       logger.info('📩 Webhook recebido');
       logger.info(JSON.stringify(body, null, 2));
 
-      const data = body?.data;
+      const data = body?.data || body;
 
       if (!data) return null;
 
-      // Ignorar mensagens enviadas por você
-      if (data?.key?.fromMe) return null;
+      const key = data?.key || data?.message?.key || {};
 
-      const numero = data?.key?.remoteJid
-        ?.replace('@s.whatsapp.net', '');
+      // Ignorar mensagens enviadas por você
+      if (key?.fromMe) return null;
+
+      const remoteJid = key?.remoteJid || data?.remoteJid || data?.jid;
+
+      // ignora grupos/status
+      if (!remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') {
+        return null;
+      }
+
+      const numero = remoteJid
+        ?.replace('@s.whatsapp.net', '')
+        ?.replace('@lid', '');
 
       let texto = '';
 
-      if (data?.message?.conversation) {
-        texto = data.message.conversation;
+      const mensagem = data?.message || {};
+
+      if (mensagem?.conversation) {
+        texto = mensagem.conversation;
+      } else if (mensagem?.extendedTextMessage?.text) {
+        texto = mensagem.extendedTextMessage.text;
+      } else if (mensagem?.imageMessage?.caption) {
+        texto = mensagem.imageMessage.caption;
+      } else if (mensagem?.videoMessage?.caption) {
+        texto = mensagem.videoMessage.caption;
+      } else if (mensagem?.buttonsResponseMessage?.selectedDisplayText) {
+        texto = mensagem.buttonsResponseMessage.selectedDisplayText;
+      } else if (mensagem?.listResponseMessage?.title) {
+        texto = mensagem.listResponseMessage.title;
       }
 
-      if (data?.message?.extendedTextMessage?.text) {
-        texto = data.message.extendedTextMessage.text;
-      }
+      const textoNormalizado = texto?.trim();
 
-      if (!numero || !texto) {
+      if (!numero || !textoNormalizado) {
         logger.warn('⚠️ Webhook sem texto válido');
         return null;
       }
 
       logger.info(`👤 Número: ${numero}`);
-      logger.info(`💬 Texto: ${texto}`);
+      logger.info(`💬 Texto: ${textoNormalizado}`);
 
       return {
 
         numero,
-        texto,
+        texto: textoNormalizado,
 
         timestamp: new Date(
           (data.messageTimestamp || Date.now() / 1000) * 1000
