@@ -177,20 +177,34 @@ export const db = {
   // =============================
   // LISTAR
   // =============================
-  async listar(pag = 0) {
+  async listar(pag = 0, tamanhoPagina = 30) {
     try {
+      const paginaAtual = Number.isInteger(pag) && pag >= 0 ? pag : 0;
+      const limite = Number.isInteger(tamanhoPagina) && tamanhoPagina > 0
+        ? Math.min(tamanhoPagina, 100)
+        : 30;
+
       const { data, count } = await sb
         .from('leads')
         .select('*, diagnosticos(score, problemas)', { count: 'exact' })
         .order('created_at', { ascending: false })
-        .range(pag * 50, pag * 50 + 49);
+        .range(paginaAtual * limite, paginaAtual * limite + (limite - 1));
 
       return {
         leads: data || [],
-        total: count || 0
+        total: count || 0,
+        pagina: paginaAtual,
+        por_pagina: limite,
+        total_paginas: Math.max(1, Math.ceil((count || 0) / limite))
       };
     } catch {
-      return { leads: [], total: 0 };
+      return {
+        leads: [],
+        total: 0,
+        pagina: 0,
+        por_pagina: 30,
+        total_paginas: 1
+      };
     }
   },
 

@@ -16,7 +16,30 @@ const sb = createClient(
 );
 
 app.use(express.json());
-app.use(express.static(join(__dirname, 'public')));
+app.use(express.static(join(__dirname, 'public'), {
+  setHeaders: (res, path) => {
+    // Evita cache do HTML para refletir mudanças do dashboard imediatamente em produção.
+    if (path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
+    }
+  }
+}));
+
+app.use('/api', (_, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+
+app.get('/', (_, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  res.sendFile(join(__dirname, 'public', 'index.html'));
+});
 
 
 // =============================
@@ -40,7 +63,9 @@ app.get('/api/metricas', auth, async (_, res) => {
 });
 
 app.get('/api/leads', auth, async (req, res) => {
-  res.json(await db.listar(parseInt(req.query.p) || 0));
+  const pagina = Number.parseInt(req.query.p, 10) || 0;
+  const limite = Number.parseInt(req.query.limit, 10) || 30;
+  res.json(await db.listar(pagina, limite));
 });
 
 app.get('/api/leads/:id/msgs', auth, async (req, res) => {
@@ -141,7 +166,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
 // =============================
 // HEALTH CHECK
 // =============================
-app.get('/', (_, res) => {
+app.get('/health', (_, res) => {
   res.send('LEAD MACHINE ONLINE');
 });
 
