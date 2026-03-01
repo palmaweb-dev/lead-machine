@@ -4,1273 +4,272 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lead Machine Palmaweb — Painel de Controle</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js">
 
-    // Navigation - Smooth scroll
-    function navigateTo(event, sectionId) {
-      event.preventDefault();
-      const section = document.getElementById(sectionId);
-      if (section) {
-        const mainContent = document.querySelector('.main-content');
-        const headerHeight = 64;
-        const sectionTop = section.getBoundingClientRect().top + window.pageYOffset - headerHeight - 20;
-        window.scrollTo({ top: sectionTop, behavior: 'smooth' });
-        
-        // Update active state
-        document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-        event.currentTarget.classList.add('active');
-      }
-    }
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 
-    // Auto-highlight active nav on scroll
-    function updateActiveNav() {
-      const sections = ['section-dashboard', 'section-prospeccao', 'section-leads'];
-      const headerHeight = 64 + 40;
-      let currentSection = sections[0];
-      
-      for (const id of sections) {
-        const el = document.getElementById(id);
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          if (rect.top <= headerHeight) {
-            currentSection = id;
-          }
-        }
-      }
-      
-      document.querySelectorAll('.nav-item[data-section]').forEach(item => {
-        item.classList.remove('active');
-        if (item.dataset.section === currentSection) {
-          item.classList.add('active');
-        }
-      });
-    }
-
-    window.addEventListener('scroll', updateActiveNav, { passive: true });
-</script>
   <style>
-    :root {
-      --primary: #372498;
-      --primary-light: #4a32b8;
-      --secondary: #ae69e7;
-      --secondary-light: #c48ff0;
-      --gradient: linear-gradient(135deg, #372498 0%, #ae69e7 100%);
-      --gradient-subtle: linear-gradient(135deg, rgba(55,36,152,0.15) 0%, rgba(174,105,231,0.15) 100%);
-      --gradient-card: linear-gradient(135deg, rgba(55,36,152,0.08) 0%, rgba(174,105,231,0.08) 100%);
-      --bg-dark: #0a0a0f;
-      --bg-card: #111118;
-      --bg-card-hover: #16161f;
-      --bg-surface: #1a1a24;
-      --bg-surface-light: #22222e;
-      --border: rgba(174,105,231,0.12);
-      --border-light: rgba(174,105,231,0.06);
-      --text-primary: #f0f0f5;
-      --text-secondary: #8888a0;
-      --text-muted: #55556a;
-      --glow-primary: 0 0 20px rgba(55,36,152,0.3);
-      --glow-secondary: 0 0 20px rgba(174,105,231,0.2);
-      --radius-sm: 8px;
-      --radius-md: 12px;
-      --radius-lg: 16px;
-      --radius-xl: 20px;
-      --shadow-sm: 0 2px 8px rgba(0,0,0,0.2);
-      --shadow-md: 0 4px 16px rgba(0,0,0,0.25);
-      --shadow-lg: 0 8px 32px rgba(0,0,0,0.3);
-      --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      --transition-slow: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    body{
+      font-family: Inter, sans-serif;
+      background:#0a0a0f;
+      color:#fff;
+      margin:0;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: var(--bg-dark);
-      color: var(--text-primary);
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
-
-    /* Background ambient effect */
-    body::before {
-      content: '';
-      position: fixed;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(ellipse at 20% 20%, rgba(55,36,152,0.08) 0%, transparent 50%),
-                  radial-gradient(ellipse at 80% 80%, rgba(174,105,231,0.05) 0%, transparent 50%);
-      z-index: 0;
-      pointer-events: none;
-    }
-
-    /* ===== SIDEBAR ===== */
-    .sidebar {
-      position: fixed;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 260px;
-      background: linear-gradient(180deg, #0e0e16 0%, #111118 100%);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      z-index: 100;
-      transition: var(--transition-slow);
-    }
-
-    .sidebar-header {
-      padding: 24px 20px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .sidebar-logo {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      text-decoration: none;
-    }
-
-    .sidebar-logo img {
-      height: 32px;
-      width: auto;
-      filter: brightness(1.1);
-    }
-
-    .sidebar-logo-text {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-primary);
-      letter-spacing: -0.02em;
-      line-height: 1.3;
-    }
-
-    .sidebar-logo-text span {
-      display: block;
-      font-size: 10px;
-      font-weight: 400;
-      color: var(--text-secondary);
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      margin-top: 2px;
-    }
-
-    .sidebar-nav {
-      flex: 1;
-      padding: 16px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .nav-section-label {
-      font-size: 10px;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      padding: 16px 12px 8px;
-    }
-
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 12px;
-      border-radius: var(--radius-sm);
-      color: var(--text-secondary);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: var(--transition);
-      text-decoration: none;
-      position: relative;
-    }
-
-    .nav-item:hover {
-      background: rgba(174,105,231,0.08);
-      color: var(--text-primary);
-    }
-
-    .nav-item.active {
-      background: var(--gradient-subtle);
-      color: var(--secondary-light);
-    }
-
-    .nav-item.active::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 3px;
-      height: 20px;
-      background: var(--gradient);
-      border-radius: 0 4px 4px 0;
-    }
-
-    .nav-item i {
-      width: 18px;
-      height: 18px;
-      opacity: 0.7;
-    }
-
-    .nav-item.active i {
-      opacity: 1;
-    }
-
-    .sidebar-footer {
-      padding: 16px 20px;
-      border-top: 1px solid var(--border);
-    }
-
-    .sidebar-version {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    /* ===== MAIN CONTENT ===== */
-    .main-content {
-      margin-left: 260px;
-      min-height: 100vh;
-      position: relative;
-      z-index: 1;
-    }
-
-    /* ===== HEADER ===== */
-    .header {
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      background: rgba(10,10,15,0.8);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--border);
-      padding: 0 32px;
-      height: 64px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .header-title {
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      background: var(--gradient);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .header-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      background: rgba(16,185,129,0.1);
-      border: 1px solid rgba(16,185,129,0.2);
-      border-radius: 100px;
-      font-size: 12px;
-      font-weight: 500;
-      color: #10b981;
-    }
-
-    .header-badge .dot {
-      width: 6px;
-      height: 6px;
-      background: #10b981;
-      border-radius: 50%;
-      animation: pulse-dot 2s infinite;
-    }
-
-    @keyframes pulse-dot {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-
-    /* ===== PAGE CONTENT ===== */
-    .page-content {
-      padding: 32px;
-      max-width: 1400px;
-    }
-
-    .page-header {
-      margin-bottom: 32px;
-    }
-
-    .page-header h1 {
-      font-size: 28px;
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      color: var(--text-primary);
-      margin-bottom: 6px;
-    }
-
-    .page-header p {
-      font-size: 14px;
-      color: var(--text-secondary);
-    }
-
-    /* ===== METRIC CARDS ===== */
-    .cards {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-      margin-bottom: 32px;
-    }
-
-    .card {
-      position: relative;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 24px;
-      transition: var(--transition);
-      overflow: hidden;
-    }
-
-    .card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: var(--gradient);
-      opacity: 0;
-      transition: var(--transition);
-    }
-
-    .card:hover {
-      border-color: rgba(174,105,231,0.2);
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-md), var(--glow-secondary);
-    }
-
-    .card:hover::before {
-      opacity: 1;
-    }
-
-    .card-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: var(--radius-md);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 16px;
-      background: var(--gradient-subtle);
-    }
-
-    .card-icon i {
-      width: 20px;
-      height: 20px;
-      color: var(--secondary);
-    }
-
-    .card-icon.blue { background: rgba(59,130,246,0.12); }
-    .card-icon.blue i { color: #60a5fa; }
-    .card-icon.green { background: rgba(16,185,129,0.12); }
-    .card-icon.green i { color: #34d399; }
-    .card-icon.amber { background: rgba(245,158,11,0.12); }
-    .card-icon.amber i { color: #fbbf24; }
-    .card-icon.purple { background: rgba(174,105,231,0.12); }
-    .card-icon.purple i { color: #c48ff0; }
-
-    .card .valor {
-      font-size: 32px;
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      color: var(--text-primary);
-      line-height: 1;
-      margin-bottom: 6px;
-    }
-
-    .card .label {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-secondary);
-    }
-
-    /* ===== PANELS ===== */
-    .panel {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      padding: 28px;
-      margin-bottom: 24px;
-      transition: var(--transition);
-    }
-
-    .panel:hover {
-      border-color: rgba(174,105,231,0.15);
-    }
-
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 24px;
-    }
-
-    .panel-title {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--text-primary);
-      letter-spacing: -0.01em;
-    }
-
-    .panel-title i {
-      width: 20px;
-      height: 20px;
-      color: var(--secondary);
-    }
-
-    /* ===== FORM ELEMENTS ===== */
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .form-label {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    input, select {
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      padding: 12px 16px;
-      border-radius: var(--radius-md);
-      width: 100%;
-      font-size: 14px;
-      font-family: 'Inter', sans-serif;
-      transition: var(--transition);
-      outline: none;
-    }
-
-    input::placeholder {
-      color: var(--text-muted);
-    }
-
-    input:focus, select:focus {
-      border-color: var(--secondary);
-      box-shadow: 0 0 0 3px rgba(174,105,231,0.15);
-    }
-
-    .btn-group {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-
-    button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 12px 24px;
-      border: none;
-      border-radius: var(--radius-md);
-      font-size: 14px;
-      font-weight: 600;
-      font-family: 'Inter', sans-serif;
-      cursor: pointer;
-      transition: var(--transition);
-      position: relative;
-      overflow: hidden;
-    }
-
-    button i {
-      width: 16px;
-      height: 16px;
-    }
-
-    .btn-primary {
-      background: var(--gradient);
-      color: white;
-      box-shadow: 0 2px 12px rgba(55,36,152,0.3);
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 20px rgba(55,36,152,0.4);
-    }
-
-    .btn-primary:active {
-      transform: translateY(0);
-    }
-
-    .btn-danger {
-      background: rgba(239,68,68,0.12);
-      color: #f87171;
-      border: 1px solid rgba(239,68,68,0.2);
-    }
-
-    .btn-danger:hover {
-      background: rgba(239,68,68,0.2);
-      border-color: rgba(239,68,68,0.3);
-    }
-
-
-    .btn-secondary {
-      background: var(--bg-surface);
-      color: var(--text-primary);
-      border: 1px solid var(--border);
-      padding: 10px 16px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 600;
-    }
-
-    .btn-secondary:hover:not(:disabled) {
-      background: var(--bg-surface-light);
-      border-color: rgba(174,105,231,0.35);
-    }
-
-    .btn-secondary:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-
-    .pagination {
-      margin-top: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    #pagina-indicador {
-      color: var(--text-secondary);
-      font-size: 13px;
-      font-weight: 600;
-    }
-
-    .status-msg {
-      margin-top: 16px;
-      font-size: 13px;
-      color: var(--text-secondary);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-height: 20px;
-    }
-
-    /* ===== TABLE ===== */
-    .table-wrapper {
-      overflow-x: auto;
-      border-radius: var(--radius-md);
-    }
-
-    table {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-      font-size: 13px;
-    }
-
-    thead {
-      position: sticky;
-      top: 0;
-    }
-
-    th {
-      background: var(--bg-surface);
-      padding: 12px 16px;
-      text-align: left;
-      color: var(--text-secondary);
-      font-weight: 600;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-
-    th:first-child { border-radius: var(--radius-sm) 0 0 0; }
-    th:last-child { border-radius: 0 var(--radius-sm) 0 0; }
-
-    td {
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border-light);
-      color: var(--text-primary);
-      transition: var(--transition);
-    }
-
-    tr:last-child td {
-      border-bottom: none;
-    }
-
-    tbody tr {
-      transition: var(--transition);
-    }
-
-    tbody tr:hover {
-      background: rgba(174,105,231,0.04);
-    }
-
-    tbody tr:hover td {
-      color: var(--text-primary);
-    }
-
-    td a {
-      color: var(--secondary-light);
-      text-decoration: none;
-      font-weight: 500;
-      transition: var(--transition);
-    }
-
-    td a:hover {
-      color: var(--secondary);
-      text-decoration: underline;
-    }
-
-    /* ===== BADGES ===== */
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 12px;
-      border-radius: 100px;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.01em;
-      white-space: nowrap;
-    }
-
-    .badge::before {
-      content: '';
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .badge.numero_invalido,
-    .badge.invalido {
-      background: rgba(239,68,68,0.12);
-      color: #f87171;
-      border: 1px solid rgba(239,68,68,0.15);
-    }
-    .badge.numero_invalido::before,
-    .badge.invalido::before {
-      background: #ef4444;
-    }
-
-    .badge.contatado {
-      background: rgba(59,130,246,0.12);
-      color: #60a5fa;
-      border: 1px solid rgba(59,130,246,0.15);
-    }
-    .badge.contatado::before {
-      background: #3b82f6;
-    }
-
-    .badge.respondeu {
-      background: rgba(16,185,129,0.12);
-      color: #34d399;
-      border: 1px solid rgba(16,185,129,0.15);
-    }
-    .badge.respondeu::before {
-      background: #10b981;
-    }
-
-    .badge.quente {
-      background: rgba(239,68,68,0.12);
-      color: #f87171;
-      border: 1px solid rgba(239,68,68,0.15);
-    }
-    .badge.quente::before {
-      background: #ef4444;
-      animation: pulse-dot 1.5s infinite;
-    }
-
-    .badge.morno {
-      background: rgba(245,158,11,0.12);
-      color: #fbbf24;
-      border: 1px solid rgba(245,158,11,0.15);
-    }
-    .badge.morno::before {
-      background: #f59e0b;
-    }
-
-    .badge.frio {
-      background: rgba(59,130,246,0.12);
-      color: #60a5fa;
-      border: 1px solid rgba(59,130,246,0.15);
-    }
-    .badge.frio::before {
-      background: #3b82f6;
-    }
-
-    .badge.novo,
-    .badge.pendente {
-      background: rgba(174,105,231,0.12);
-      color: #c48ff0;
-      border: 1px solid rgba(174,105,231,0.15);
-    }
-    .badge.novo::before,
-    .badge.pendente::before {
-      background: #ae69e7;
-    }
-
-    .badge.enviado {
-      background: rgba(99,102,241,0.12);
-      color: #a5b4fc;
-      border: 1px solid rgba(99,102,241,0.15);
-    }
-    .badge.enviado::before {
-      background: #6366f1;
-    }
-
-    /* ===== LOADING SKELETON ===== */
-    .skeleton {
-      background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-surface-light) 50%, var(--bg-surface) 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s infinite;
-      border-radius: var(--radius-sm);
-    }
-
-    @keyframes shimmer {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
-    }
-
-    /* ===== EMPTY STATE ===== */
-    .empty-state {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 48px 24px;
-      text-align: center;
-    }
-
-    .empty-state i {
-      width: 48px;
-      height: 48px;
-      color: var(--text-muted);
-      margin-bottom: 16px;
-    }
-
-    .empty-state p {
-      color: var(--text-muted);
-      font-size: 14px;
-    }
-
-    /* ===== ANIMATIONS ===== */
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateX(-12px); }
-      to { opacity: 1; transform: translateX(0); }
-    }
-
-    .animate-in {
-      animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    .panel{
+      background:#111118;
+      border:1px solid rgba(174,105,231,0.15);
+      border-radius:12px;
+      padding:24px;
+      margin:24px;
     }
 
-    .cards .card:nth-child(1) { animation: fadeIn 0.4s cubic-bezier(0.4,0,0.2,1) 0.05s both; }
-    .cards .card:nth-child(2) { animation: fadeIn 0.4s cubic-bezier(0.4,0,0.2,1) 0.1s both; }
-    .cards .card:nth-child(3) { animation: fadeIn 0.4s cubic-bezier(0.4,0,0.2,1) 0.15s both; }
-    .cards .card:nth-child(4) { animation: fadeIn 0.4s cubic-bezier(0.4,0,0.2,1) 0.2s both; }
-
-    /* ===== SCROLLBAR ===== */
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: var(--bg-surface-light);
-      border-radius: 10px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: var(--text-muted);
+    table{
+      width:100%;
+      border-collapse:collapse;
     }
 
-    /* ===== RESPONSIVE ===== */
-    @media (max-width: 1024px) {
-      .sidebar { width: 220px; }
-      .main-content { margin-left: 220px; }
-      .cards { grid-template-columns: repeat(2, 1fr); }
-      .form-grid { grid-template-columns: 1fr 1fr; }
-      .page-content { padding: 24px; }
+    th,td{
+      padding:12px;
+      border-bottom:1px solid rgba(255,255,255,0.06);
+      font-size:13px;
     }
 
-    @media (max-width: 768px) {
-      .sidebar {
-        transform: translateX(-100%);
-        width: 260px;
-      }
-      .sidebar.open {
-        transform: translateX(0);
-      }
-      .main-content { margin-left: 0; }
-      .cards { grid-template-columns: 1fr 1fr; }
-      .form-grid { grid-template-columns: 1fr; }
-      .header { padding: 0 16px; }
-      .page-content { padding: 16px; }
+    .btn{
+      padding:10px 16px;
+      border-radius:8px;
+      border:none;
+      cursor:pointer;
+      font-weight:600;
     }
 
-    /* ===== TOOLTIP / MISC ===== */
-    .divider {
-      height: 1px;
-      background: var(--border);
-      margin: 8px 0;
+    .btn-primary{
+      background:linear-gradient(135deg,#372498,#ae69e7);
+      color:white;
     }
 
-    .text-gradient {
-      background: var(--gradient);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+    .btn-secondary{
+      background:#1a1a24;
+      color:white;
+      border:1px solid rgba(255,255,255,0.1);
     }
 
-    /* Glow effect on cards */
-    .card-glow {
-      position: absolute;
-      top: -1px;
-      left: -1px;
-      right: -1px;
-      bottom: -1px;
-      border-radius: var(--radius-lg);
-      background: var(--gradient);
-      opacity: 0;
-      z-index: -1;
-      filter: blur(8px);
-      transition: var(--transition);
+    .pagination{
+      margin-top:16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
     }
 
-    .card:hover .card-glow {
-      opacity: 0.08;
+    .pagination-info{
+      margin-top:8px;
+      font-size:12px;
+      color:#888;
     }
 
-    /* Badge label formatting */
-    .badge-label {
-      text-transform: capitalize;
+    .badge{
+      padding:4px 10px;
+      border-radius:20px;
+      font-size:12px;
+      background:rgba(174,105,231,0.15);
     }
 
-    .nav-item.disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-      pointer-events: auto;
-    }
-
-    .nav-item.disabled:hover {
-      background: transparent;
-      color: var(--text-secondary);
-    }
-
-    .nav-badge {
-      margin-left: auto;
-      font-size: 9px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      padding: 2px 8px;
-      border-radius: 100px;
-      background: rgba(174,105,231,0.1);
-      color: var(--text-muted);
-      border: 1px solid rgba(174,105,231,0.1);
-    }
-
-    .nav-item {
-      scroll-behavior: smooth;
-    }
   </style>
 </head>
+
 <body>
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <a href="#" class="sidebar-logo">
-        <img src="https://www.palmaweb.com.br/wp-content/uploads/2023/09/logo-palmaweb-1.webp" alt="Palmaweb">
-        <div class="sidebar-logo-text">
-          Lead Machine
-          <span>Painel de Controle</span>
-        </div>
-      </a>
-    </div>
-    <nav class="sidebar-nav">
-      <div class="nav-section-label">Principal</div>
-      <a href="#section-dashboard" class="nav-item active" data-section="section-dashboard" onclick="navigateTo(event, 'section-dashboard')">
-        <i data-lucide="layout-dashboard"></i>
-        Dashboard
-      </a>
-      <a href="#section-leads" class="nav-item" data-section="section-leads" onclick="navigateTo(event, 'section-leads')">
-        <i data-lucide="users"></i>
-        Leads
-      </a>
-      <a href="#section-prospeccao" class="nav-item" data-section="section-prospeccao" onclick="navigateTo(event, 'section-prospeccao')">
-        <i data-lucide="rocket"></i>
-        Prospecção
-      </a>
-      <div class="nav-section-label">Sistema</div>
-      <a href="#" class="nav-item disabled" onclick="event.preventDefault()">
-        <i data-lucide="message-circle"></i>
-        WhatsApp
-        <span class="nav-badge">Em breve</span>
-      </a>
-      <a href="#" class="nav-item disabled" onclick="event.preventDefault()">
-        <i data-lucide="settings"></i>
-        Configurações
-        <span class="nav-badge">Em breve</span>
-      </a>
-    </nav>
-    <div class="sidebar-footer">
-      <div class="sidebar-version">Lead Machine v2.0  Palmaweb</div>
-    </div>
-  </aside>
+<div class="panel">
 
-  <!-- MAIN CONTENT -->
-  <div class="main-content">
+  <h2>Leads</h2>
 
-    <!-- HEADER -->
-    <div class="header">
-      <div class="header-left">
-        <button class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')" style="display:none;background:transparent;color:var(--text-secondary);padding:8px;box-shadow:none;">
-          <i data-lucide="menu"></i>
-        </button>
-        <div class="header-title">Lead Machine Palmaweb — Painel de Controle</div>
-      </div>
-      <div class="header-right">
-        <div class="header-badge">
-          <div class="dot"></div>
-          Sistema Online
-        </div>
-      </div>
-    </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Empresa</th>
+        <th>WhatsApp</th>
+        <th>Site</th>
+        <th>Score</th>
+        <th>Status</th>
+        <th>Interesse</th>
+      </tr>
+    </thead>
 
-    <!-- PAGE CONTENT -->
-    <div class="page-content">
+    <tbody id="tabela-leads">
+      <tr>
+        <td colspan="6">Carregando...</td>
+      </tr>
+    </tbody>
+  </table>
 
-      <!-- Page Header -->
-      <div class="page-header animate-in">
-        <h1>Dashboard</h1>
-        <p>Visão geral das suas métricas e leads em tempo real</p>
-      </div>
+  <div class="pagination">
 
-      <!-- Mtricas -->
-      <div id="section-dashboard" class="cards">
-        <div class="card">
-          <div class="card-glow"></div>
-          <div class="card-icon purple">
-            <i data-lucide="users"></i>
-          </div>
-          <div class="valor" id="m-total"></div>
-          <div class="label">Total Leads</div>
-        </div>
-        <div class="card">
-          <div class="card-glow"></div>
-          <div class="card-icon blue">
-            <i data-lucide="send"></i>
-          </div>
-          <div class="valor" id="m-enviados"></div>
-          <div class="label">Enviados Hoje</div>
-        </div>
-        <div class="card">
-          <div class="card-glow"></div>
-          <div class="card-icon green">
-            <i data-lucide="message-square"></i>
-          </div>
-          <div class="valor" id="m-respostas"></div>
-          <div class="label">Respostas Hoje</div>
-        </div>
-        <div class="card">
-          <div class="card-glow"></div>
-          <div class="card-icon amber">
-            <i data-lucide="calendar-check"></i>
-          </div>
-          <div class="valor" id="m-reunioes"></div>
-          <div class="label">Reuniões Hoje</div>
-        </div>
-      </div>
+    <button class="btn btn-secondary" id="btn-prev" onclick="mudarPagina(-1)">
+      Anterior
+    </button>
 
-      <!-- Controle -->
-      <div id="section-prospeccao" class="panel animate-in" style="animation-delay: 0.25s">
-        <div class="panel-header">
-          <div class="panel-title">
-            <i data-lucide="rocket"></i>
-            Iniciar Prospecção
-          </div>
-        </div>
-        <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label">Segmento</label>
-            <input id="segmento" placeholder="ex: clínica, advogado, dentista">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Cidade</label>
-            <input id="cidade" placeholder="ex: São Paulo, Campinas">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Limite</label>
-            <input id="limite" type="number" placeholder="Limite de empresas (padrão: 20)" value="20">
-          </div>
-        </div>
-        <div class="btn-group">
-          <button class="btn-primary" onclick="iniciarProspeccao()">
-            <i data-lucide="play"></i>
-            Iniciar
-          </button>
-          <button class="btn-danger" onclick="pausar()">
-            <i data-lucide="pause"></i>
-            Pausar
-          </button>
-        </div>
-        <p id="status-msg" class="status-msg"></p>
-      </div>
+    <span id="pagina-indicador">Página 1 de 1</span>
 
-      <!-- Leads -->
-      <div id="section-leads" class="panel animate-in" style="animation-delay: 0.35s">
-        <div class="panel-header">
-          <div class="panel-title">
-            <i data-lucide="list"></i>
-            Leads Recentes
-          </div>
-        </div>
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Empresa</th>
-                <th>WhatsApp</th>
-                <th>Site</th>
-                <th>Score</th>
-                <th>Status</th>
-                <th>Interesse</th>
-              </tr>
-            </thead>
-            <tbody id="tabela-leads">
-              <tr>
-                <td colspan="6">
-                  <div class="empty-state">
-                    <i data-lucide="inbox"></i>
-                    <p>Carregando leads...</p>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="pagination" id="leads-pagination">
-          <button class="btn-secondary" id="btn-prev" onclick="mudarPagina(-1)">
-            <i data-lucide="chevron-left"></i>
-            Anterior
-          </button>
-          <span id="pagina-indicador">Página 1 de 1</span>
-          <button class="btn-secondary" id="btn-next" onclick="mudarPagina(1)">
-            Próxima
-            <i data-lucide="chevron-right"></i>
-          </button>
-        </div>
-      </div>
+    <button class="btn btn-secondary" id="btn-next" onclick="mudarPagina(1)">
+      Próxima
+    </button>
 
-    </div>
   </div>
 
+  <div class="pagination-info" id="paginacao-resumo">
+    Mostrando 0 de 0 leads
+  </div>
+
+</div>
+
+
 <script>
-    const API_KEY = prompt('Senha do painel:') || '';
-    const h = { 'Content-Type': 'application/json', 'x-api-key': API_KEY };
 
-    // Initialize Lucide icons
-    lucide.createIcons();
+const API_KEY = prompt('Senha do painel:') || '';
 
-    async function carregarMetricas() {
-      const r = await fetch('/api/metricas', { headers: h });
-      const m = await r.json();
-      document.getElementById('m-total').textContent = m.total_leads || 0;
-      document.getElementById('m-enviados').textContent = m.enviados_hoje || 0;
-      document.getElementById('m-respostas').textContent = m.responderam_hoje || 0;
-      document.getElementById('m-reunioes').textContent = m.reunioes_hoje || 0;
-    }
+const h = {
+  'Content-Type': 'application/json',
+  'x-api-key': API_KEY
+};
 
-    let paginaAtual = 0;
-    const leadsPorPagina = 30;
-    let totalPaginas = 1;
-
-    async function carregarLeads() {
-      const r = await fetch(`/api/leads?p=${paginaAtual}&limit=${leadsPorPagina}`, { headers: h });
-      const resposta = await r.json();
-      const tbody = document.getElementById('tabela-leads');
-
-      totalPaginas = Math.max(1, resposta.total_paginas || 1);
-      if (paginaAtual > (totalPaginas - 1)) {
-        paginaAtual = totalPaginas - 1;
-        return carregarLeads();
-      }
-
-      const leads = resposta.leads || [];
-
-      if (leads.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><i data-lucide="inbox"></i><p>Nenhum lead encontrado ainda</p></div></td></tr>';
-        atualizarPaginacao();
-        lucide.createIcons();
-        return;
-      }
-
-      tbody.innerHTML = leads.map(l => {
-        const statusText = formatStatus(l.status);
-        const interesseText = formatStatus(l.interesse || '');
-        return `
-        <tr>
-          <td><strong>${l.nome_empresa}</strong></td>
-          <td>${l.whatsapp || ''}</td>
-          <td>${l.site ? `<a href="${l.site}" target="_blank">${truncate(l.site, 30)}</a>` : ''}</td>
-          <td>${getScore(l)}</td>
-          <td><span class="badge ${l.status}">${statusText}</span></td>
-          <td><span class="badge ${l.interesse || ''}">${interesseText || ''}</span></td>
-        </tr>`;
-      }).join('');
-      atualizarPaginacao();
-      lucide.createIcons();
-    }
-
-    function atualizarPaginacao() {
-      document.getElementById('pagina-indicador').textContent = `Página ${paginaAtual + 1} de ${totalPaginas}`;
-      document.getElementById('btn-prev').disabled = paginaAtual <= 0;
-      document.getElementById('btn-next').disabled = paginaAtual >= (totalPaginas - 1);
-    }
-
-    function mudarPagina(direcao) {
-      const proximaPagina = paginaAtual + direcao;
-      if (proximaPagina < 0 || proximaPagina >= totalPaginas) return;
-      paginaAtual = proximaPagina;
-      carregarLeads();
-    }
-
-    function formatStatus(status) {
-      if (!status) return '';
-      return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    }
-
-    function truncate(str, max) {
-      if (!str) return '';
-      return str.length > max ? str.substring(0, max) + '...' : str;
-    }
-
-    function getScore(lead) {
-      let score = null;
-      if (lead.diagnosticos && Array.isArray(lead.diagnosticos) && lead.diagnosticos.length > 0) {
-        score = lead.diagnosticos[0].score;
-      } else if (lead.diagnosticos && typeof lead.diagnosticos === 'object' && !Array.isArray(lead.diagnosticos)) {
-        score = lead.diagnosticos.score;
-      }
-      if (score === null || score === undefined) return '—';
-      // Return score with color coding
-      let color = '#f87171'; // red for low
-      if (score >= 70) color = '#34d399'; // green for high
-      else if (score >= 40) color = '#fbbf24'; // yellow for medium
-      return '<span style="font-weight:700;color:' + color + '">' + score + '</span>';
-    }
+lucide.createIcons();
 
 
+let paginaAtual = 0;
+const leadsPorPagina = 30;
 
-    async function iniciarProspeccao() {
-      const body = {
-        segmento: document.getElementById('segmento').value,
-        cidade: document.getElementById('cidade').value,
-        limite: parseInt(document.getElementById('limite').value) || 20
-      };
-      const r = await fetch('/api/iniciar', { method: 'POST', headers: h, body: JSON.stringify(body) });
-      const d = await r.json();
-      document.getElementById('status-msg').innerHTML = '<span style="color:#34d399"> ' + d.msg + '</span>';
-    }
-
-    async function pausar() {
-      await fetch('/api/pausar', { method: 'POST', headers: h });
-      document.getElementById('status-msg').innerHTML = '<span style="color:#fbbf24"> Automação pausada</span>';
-    }
-
-    // Atualizar a cada 15s
-    carregarMetricas(); carregarLeads();
-    setInterval(() => { carregarMetricas(); carregarLeads(); }, 15000);
+let totalPaginas = 1;
+let totalLeads = 0;
 
 
-    // Navigation - Smooth scroll
-    function navigateTo(event, sectionId) {
-      event.preventDefault();
-      const section = document.getElementById(sectionId);
-      if (section) {
-        const mainContent = document.querySelector('.main-content');
-        const headerHeight = 64;
-        const sectionTop = section.getBoundingClientRect().top + window.pageYOffset - headerHeight - 20;
-        window.scrollTo({ top: sectionTop, behavior: 'smooth' });
-        
-        // Update active state
-        document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-        event.currentTarget.classList.add('active');
-      }
-    }
+async function carregarLeads(){
 
-    // Auto-highlight active nav on scroll
-    function updateActiveNav() {
-      const sections = ['section-dashboard', 'section-prospeccao', 'section-leads'];
-      const headerHeight = 64 + 40;
-      let currentSection = sections[0];
-      
-      for (const id of sections) {
-        const el = document.getElementById(id);
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          if (rect.top <= headerHeight) {
-            currentSection = id;
-          }
-        }
-      }
-      
-      document.querySelectorAll('.nav-item[data-section]').forEach(item => {
-        item.classList.remove('active');
-        if (item.dataset.section === currentSection) {
-          item.classList.add('active');
-        }
-      });
-    }
+  const r = await fetch(`/api/leads?p=${paginaAtual}&limit=${leadsPorPagina}`, { headers:h });
 
-    window.addEventListener('scroll', updateActiveNav, { passive: true });
+  const resposta = await r.json();
+
+  const tbody = document.getElementById('tabela-leads');
+
+  totalPaginas = Math.max(1, resposta.total_paginas || 1);
+  totalLeads = resposta.total || 0;
+
+  if(paginaAtual > (totalPaginas - 1)){
+    paginaAtual = totalPaginas - 1;
+    return carregarLeads();
+  }
+
+  const leads = resposta.leads || [];
+
+  if(leads.length === 0){
+    tbody.innerHTML = `<tr><td colspan="6">Nenhum lead encontrado</td></tr>`;
+    atualizarPaginacao();
+    return;
+  }
+
+  tbody.innerHTML = leads.map(l => {
+
+    const statusText = formatStatus(l.status);
+    const interesseText = formatStatus(l.interesse || '');
+
+    return `
+      <tr>
+        <td><strong>${l.nome_empresa}</strong></td>
+        <td>${l.whatsapp || ''}</td>
+        <td>${l.site ? `<a href="${l.site}" target="_blank">${truncate(l.site,30)}</a>` : ''}</td>
+        <td>${getScore(l)}</td>
+        <td><span class="badge">${statusText}</span></td>
+        <td><span class="badge">${interesseText}</span></td>
+      </tr>
+    `;
+
+  }).join('');
+
+  atualizarPaginacao();
+
+}
+
+
+function atualizarPaginacao(){
+
+  document.getElementById('pagina-indicador').textContent =
+    `Página ${paginaAtual + 1} de ${totalPaginas}`;
+
+  document.getElementById('btn-prev').disabled = paginaAtual <= 0;
+  document.getElementById('btn-next').disabled = paginaAtual >= (totalPaginas - 1);
+
+  const inicio = totalLeads === 0 ? 0 : (paginaAtual * leadsPorPagina) + 1;
+  const fim = Math.min((paginaAtual + 1) * leadsPorPagina, totalLeads);
+
+  document.getElementById('paginacao-resumo').textContent =
+    `Mostrando ${inicio}-${fim} de ${totalLeads} leads`;
+
+}
+
+
+function mudarPagina(direcao){
+
+  const proxima = paginaAtual + direcao;
+
+  if(proxima < 0 || proxima >= totalPaginas) return;
+
+  paginaAtual = proxima;
+
+  carregarLeads();
+
+}
+
+
+function formatStatus(status){
+
+  if(!status) return '';
+
+  return status
+    .replace(/_/g,' ')
+    .replace(/\b\w/g,c => c.toUpperCase());
+
+}
+
+
+function truncate(str,max){
+
+  if(!str) return '';
+
+  return str.length > max
+    ? str.substring(0,max) + '...'
+    : str;
+
+}
+
+
+function getScore(lead){
+
+  let score = null;
+
+  if(lead.diagnosticos && Array.isArray(lead.diagnosticos) && lead.diagnosticos.length > 0){
+    score = lead.diagnosticos[0].score;
+  }
+  else if(lead.diagnosticos && typeof lead.diagnosticos === 'object'){
+    score = lead.diagnosticos.score;
+  }
+
+  if(score === null || score === undefined) return '—';
+
+  let color = '#f87171';
+
+  if(score >= 70) color = '#34d399';
+  else if(score >= 40) color = '#fbbf24';
+
+  return `<span style="font-weight:700;color:${color}">${score}</span>`;
+
+}
+
+
+carregarLeads();
+
+setInterval(carregarLeads,15000);
+
 </script>
+
 </body>
 </html>
