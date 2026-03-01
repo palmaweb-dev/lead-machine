@@ -37,3 +37,27 @@ DASHBOARD_SECRET=$DASH_PASS
 EOF
 
 echo -e "\n${GREEN}✓ .env configurado!${NC}"
+
+read -p "🔹 Deseja configurar Nginx + SSL para um subdomínio agora? (s/N): " CFG_SSL
+
+if [[ "$CFG_SSL" =~ ^[Ss]$ ]]; then
+  read -p "🔹 Subdomínio [app.palmaweb.com.br]: " DOMAIN
+  DOMAIN=${DOMAIN:-app.palmaweb.com.br}
+
+  read -p "🔹 IP público do servidor [82.25.77.50]: " SERVER_IP
+  SERVER_IP=${SERVER_IP:-82.25.77.50}
+
+  read -p "🔹 E-mail para Let's Encrypt: " CERTBOT_EMAIL
+
+  if [[ -z "$CERTBOT_EMAIL" ]]; then
+    echo -e "${YELLOW}⚠ E-mail não informado. Pulando configuração de SSL.${NC}"
+    exit 0
+  fi
+
+  if [[ -x /opt/lead-machine/configurar-reverse-proxy.sh ]]; then
+    echo -e "${CYAN}\n→ Configurando Nginx reverse proxy com SSL...${NC}"
+    sudo /opt/lead-machine/configurar-reverse-proxy.sh "$DOMAIN" "$SERVER_IP" "$CERTBOT_EMAIL" 3000
+  else
+    echo -e "${YELLOW}⚠ Script /opt/lead-machine/configurar-reverse-proxy.sh não encontrado.${NC}"
+  fi
+fi
