@@ -1,128 +1,132 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lead Machine Palmaweb — Painel de Controle</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lead Machine Palmaweb — Painel de Controle</title>
 
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<style>
 
-  <style>
-    body{
-      font-family: Inter, sans-serif;
-      background:#0a0a0f;
-      color:#fff;
-      margin:0;
-    }
+body{
+  font-family: Inter, sans-serif;
+  background:#0a0a0f;
+  color:#fff;
+  margin:0;
+}
 
-    .panel{
-      background:#111118;
-      border:1px solid rgba(174,105,231,0.15);
-      border-radius:12px;
-      padding:24px;
-      margin:24px;
-    }
+.panel{
+  background:#111118;
+  border:1px solid rgba(174,105,231,0.15);
+  border-radius:12px;
+  padding:24px;
+  margin:24px;
+}
 
-    table{
-      width:100%;
-      border-collapse:collapse;
-    }
+table{
+  width:100%;
+  border-collapse:collapse;
+}
 
-    th,td{
-      padding:12px;
-      border-bottom:1px solid rgba(255,255,255,0.06);
-      font-size:13px;
-    }
+th,td{
+  padding:12px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  font-size:13px;
+}
 
-    .btn{
-      padding:10px 16px;
-      border-radius:8px;
-      border:none;
-      cursor:pointer;
-      font-weight:600;
-    }
+.btn{
+  padding:10px 16px;
+  border-radius:8px;
+  border:none;
+  cursor:pointer;
+  font-weight:600;
+}
 
-    .btn-primary{
-      background:linear-gradient(135deg,#372498,#ae69e7);
-      color:white;
-    }
+.btn-primary{
+  background:linear-gradient(135deg,#372498,#ae69e7);
+  color:white;
+}
 
-    .btn-secondary{
-      background:#1a1a24;
-      color:white;
-      border:1px solid rgba(255,255,255,0.1);
-    }
+.btn-secondary{
+  background:#1a1a24;
+  color:white;
+  border:1px solid rgba(255,255,255,0.1);
+}
 
-    .pagination{
-      margin-top:16px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-    }
+.btn-secondary:disabled{
+  opacity:0.4;
+  cursor:not-allowed;
+}
 
-    .pagination-info{
-      margin-top:8px;
-      font-size:12px;
-      color:#888;
-    }
+.pagination{
+  margin-top:16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
 
-    .badge{
-      padding:4px 10px;
-      border-radius:20px;
-      font-size:12px;
-      background:rgba(174,105,231,0.15);
-    }
+.pagination-info{
+  margin-top:8px;
+  font-size:12px;
+  color:#888;
+}
 
-  </style>
+.badge{
+  padding:4px 10px;
+  border-radius:20px;
+  font-size:12px;
+  background:rgba(174,105,231,0.15);
+}
+
+</style>
 </head>
 
 <body>
 
 <div class="panel">
 
-  <h2>Leads</h2>
+<h2>Leads</h2>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Empresa</th>
-        <th>WhatsApp</th>
-        <th>Site</th>
-        <th>Score</th>
-        <th>Status</th>
-        <th>Interesse</th>
-      </tr>
-    </thead>
+<table>
+<thead>
+<tr>
+<th>Empresa</th>
+<th>WhatsApp</th>
+<th>Site</th>
+<th>Score</th>
+<th>Status</th>
+<th>Interesse</th>
+</tr>
+</thead>
 
-    <tbody id="tabela-leads">
-      <tr>
-        <td colspan="6">Carregando...</td>
-      </tr>
-    </tbody>
-  </table>
+<tbody id="tabela-leads">
+<tr>
+<td colspan="6">Carregando...</td>
+</tr>
+</tbody>
+</table>
 
-  <div class="pagination">
+<div class="pagination">
 
-    <button class="btn btn-secondary" id="btn-prev" onclick="mudarPagina(-1)">
-      Anterior
-    </button>
+<button class="btn btn-secondary" id="btn-prev" onclick="mudarPagina(-1)">
+Anterior
+</button>
 
-    <span id="pagina-indicador">Página 1 de 1</span>
+<span id="pagina-indicador">Página 1 de 1</span>
 
-    <button class="btn btn-secondary" id="btn-next" onclick="mudarPagina(1)">
-      Próxima
-    </button>
-
-  </div>
-
-  <div class="pagination-info" id="paginacao-resumo">
-    Mostrando 0 de 0 leads
-  </div>
+<button class="btn btn-secondary" id="btn-next" onclick="mudarPagina(1)">
+Próxima
+</button>
 
 </div>
 
+<div class="pagination-info" id="paginacao-resumo">
+Mostrando 0 de 0 leads
+</div>
+
+</div>
 
 <script>
 
@@ -135,18 +139,14 @@ const h = {
 
 lucide.createIcons();
 
-
 let paginaAtual = 0;
 const leadsPorPagina = 30;
-
 let totalPaginas = 1;
 let totalLeads = 0;
-
 
 async function carregarLeads(){
 
   const r = await fetch(`/api/leads?p=${paginaAtual}&limit=${leadsPorPagina}`, { headers:h });
-
   const resposta = await r.json();
 
   const tbody = document.getElementById('tabela-leads');
@@ -189,7 +189,6 @@ async function carregarLeads(){
 
 }
 
-
 function atualizarPaginacao(){
 
   document.getElementById('pagina-indicador').textContent =
@@ -206,7 +205,6 @@ function atualizarPaginacao(){
 
 }
 
-
 function mudarPagina(direcao){
 
   const proxima = paginaAtual + direcao;
@@ -219,7 +217,6 @@ function mudarPagina(direcao){
 
 }
 
-
 function formatStatus(status){
 
   if(!status) return '';
@@ -230,7 +227,6 @@ function formatStatus(status){
 
 }
 
-
 function truncate(str,max){
 
   if(!str) return '';
@@ -240,7 +236,6 @@ function truncate(str,max){
     : str;
 
 }
-
 
 function getScore(lead){
 
@@ -261,12 +256,9 @@ function getScore(lead){
   else if(score >= 40) color = '#fbbf24';
 
   return `<span style="font-weight:700;color:${color}">${score}</span>`;
-
 }
 
-
 carregarLeads();
-
 setInterval(carregarLeads,15000);
 
 </script>
