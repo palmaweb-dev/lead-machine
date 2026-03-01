@@ -40,7 +40,9 @@ app.get('/api/metricas', auth, async (_, res) => {
 });
 
 app.get('/api/leads', auth, async (req, res) => {
-  res.json(await db.listar(parseInt(req.query.p) || 0));
+  const pagina = Number.parseInt(req.query.p, 10) || 0;
+  const limite = Number.parseInt(req.query.limit, 10) || 30;
+  res.json(await db.listar(pagina, limite));
 });
 
 app.get('/api/leads/:id/msgs', auth, async (req, res) => {

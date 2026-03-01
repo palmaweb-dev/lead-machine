@@ -543,6 +543,42 @@
       border-color: rgba(239,68,68,0.3);
     }
 
+
+    .btn-secondary {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      padding: 10px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--bg-surface-light);
+      border-color: rgba(174,105,231,0.35);
+    }
+
+    .btn-secondary:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .pagination {
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #pagina-indicador {
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
     .status-msg {
       margin-top: 16px;
       font-size: 13px;
@@ -1060,6 +1096,17 @@
             </tbody>
           </table>
         </div>
+        <div class="pagination" id="leads-pagination">
+          <button class="btn-secondary" id="btn-prev" onclick="mudarPagina(-1)">
+            <i data-lucide="chevron-left"></i>
+            Anterior
+          </button>
+          <span id="pagina-indicador">Página 1 de 1</span>
+          <button class="btn-secondary" id="btn-next" onclick="mudarPagina(1)">
+            Próxima
+            <i data-lucide="chevron-right"></i>
+          </button>
+        </div>
       </div>
 
     </div>
@@ -1081,18 +1128,31 @@
       document.getElementById('m-reunioes').textContent = m.reunioes_hoje || 0;
     }
 
+    let paginaAtual = 0;
+    const leadsPorPagina = 30;
+    let totalPaginas = 1;
+
     async function carregarLeads() {
-      const r = await fetch('/api/leads', { headers: h });
-      const leads = await r.json();
+      const r = await fetch(`/api/leads?p=${paginaAtual}&limit=${leadsPorPagina}`, { headers: h });
+      const resposta = await r.json();
       const tbody = document.getElementById('tabela-leads');
 
-      if (!leads.leads || leads.leads.length === 0) {
+      totalPaginas = Math.max(1, resposta.total_paginas || 1);
+      if (paginaAtual > (totalPaginas - 1)) {
+        paginaAtual = totalPaginas - 1;
+        return carregarLeads();
+      }
+
+      const leads = resposta.leads || [];
+
+      if (leads.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><i data-lucide="inbox"></i><p>Nenhum lead encontrado ainda</p></div></td></tr>';
+        atualizarPaginacao();
         lucide.createIcons();
         return;
       }
 
-      tbody.innerHTML = (leads.leads || []).map(l => {
+      tbody.innerHTML = leads.map(l => {
         const statusText = formatStatus(l.status);
         const interesseText = formatStatus(l.interesse || '');
         return `
@@ -1105,7 +1165,21 @@
           <td><span class="badge ${l.interesse || ''}">${interesseText || ''}</span></td>
         </tr>`;
       }).join('');
+      atualizarPaginacao();
       lucide.createIcons();
+    }
+
+    function atualizarPaginacao() {
+      document.getElementById('pagina-indicador').textContent = `Página ${paginaAtual + 1} de ${totalPaginas}`;
+      document.getElementById('btn-prev').disabled = paginaAtual <= 0;
+      document.getElementById('btn-next').disabled = paginaAtual >= (totalPaginas - 1);
+    }
+
+    function mudarPagina(direcao) {
+      const proximaPagina = paginaAtual + direcao;
+      if (proximaPagina < 0 || proximaPagina >= totalPaginas) return;
+      paginaAtual = proximaPagina;
+      carregarLeads();
     }
 
     function formatStatus(status) {
