@@ -1,0 +1,26 @@
+{
+  "name": "lead-machine",
+  "version": "1.0.0",
+  "description": "Sistema automatizado de captação de leads B2B",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test:scraper": "node src/prospecting/test.js"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.44.0",
+    "@supabase/supabase-js": "^2.43.0",
+    "axios": "^1.7.0",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0",
+    "node-cron": "^3.0.3",
+    "openai": "^4.52.0",
+    "uuid": "^10.0.0",
+    "winston": "^3.13.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
