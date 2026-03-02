@@ -16,6 +16,50 @@ const sb = createClient(
 );
 
 app.use(express.json());
+
+
+
+// =============================
+// AUTH DASHBOARD
+// =============================
+const auth = (req, res, next) => {
+  const secret = process.env.DASHBOARD_SECRET;
+
+  if (!secret) {
+    logger.warn('DASHBOARD_SECRET não definido. Dashboard desprotegido.');
+    return next();
+  }
+
+  const apiKey = req.headers['x-api-key'];
+
+  if (apiKey === secret) {
+    return next();
+  }
+
+  const authHeader = req.headers.authorization;
+
+  if (authHeader?.startsWith('Basic ')) {
+    const base64Credentials = authHeader.split(' ')[1] || '';
+    const credentials = Buffer.from(base64Credentials, 'base64').toString('utf8');
+    const [, password = ''] = credentials.split(':');
+
+    if (password === secret) {
+      return next();
+    }
+  }
+
+  res.setHeader('WWW-Authenticate', 'Basic realm="Dashboard", charset="UTF-8"');
+  res.status(401).json({ erro: 'Não autorizado' });
+};
+
+app.use((req, res, next) => {
+  if (req.path.startsWith('/webhook/whatsapp') || req.path === '/health') {
+    return next();
+  }
+
+  return auth(req, res, next);
+});
+
 app.use(express.static(join(__dirname, 'public'), {
   setHeaders: (res, path) => {
     // Evita cache do HTML para refletir mudanças do dashboard imediatamente em produção.
@@ -40,17 +84,6 @@ app.get('/', (_, res) => {
   res.setHeader('Surrogate-Control', 'no-store');
   res.sendFile(join(__dirname, 'public', 'index.html'));
 });
-
-
-// =============================
-// AUTH DASHBOARD
-// =============================
-const auth = (req, res, next) => {
-  if (req.headers['x-api-key'] === process.env.DASHBOARD_SECRET) {
-    return next();
-  }
-  res.status(401).json({ erro: 'Não autorizado' });
-};
 
 
 // =============================
