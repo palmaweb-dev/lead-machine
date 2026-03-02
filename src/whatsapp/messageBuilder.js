@@ -14,8 +14,8 @@ export class MessageBuilder {
   }
   
   construirMensagemInicial(lead, diagnostico) {
-    const primeiroNome = lead.nome_empresa.split(' ')[0];
-    
+    const empresa = lead.nome_empresa;
+
     // Escolher observação mais impactante
     const problema = diagnostico?.problemas?.[0] || 
                      'a presença digital pode estar mais otimizada';
@@ -36,13 +36,20 @@ export class MessageBuilder {
     const observacao = observacoes[problema] || 
       `identifiquei alguns pontos que podem estar limitando a captação de clientes`;
 
-    return `Olá, tudo bem? 🙂
+    // Variar levemente a abertura para não parecer robótico
+    const aberturas = [
+      `Olá! Pesquisando empresas do segmento de ${lead.segmento || 'vocês'}, acabei chegando no site da ${empresa}.`,
+      `Oi! Estava analisando a presença digital de algumas empresas da região e o site da ${empresa} apareceu para mim.`,
+      `Olá! Cheguei no site da ${empresa} durante uma pesquisa que fiz hoje.`
+    ];
 
-Realizei uma análise inicial da presença digital da *${lead.nome_empresa}* e ${observacao}.
+    const abertura = aberturas[Math.floor(Math.random() * aberturas.length)];
 
-Somos especializados em posicionamento digital estratégico para empresas como a sua e acredito que existem oportunidades claras de melhoria que podem aumentar significativamente a geração de clientes.
+    return `${abertura}
 
-Posso te explicar melhor em uma sessão estratégica gratuita, onde mostro algumas oportunidades específicas para o seu negócio?`;
+Notei que ${observacao}. Esse é um ponto que pode impactar diretamente na geração de clientes online.
+
+Posso te apresentar um diagnóstico completo em uma Sessão Estratégica gratuita, onde analiso sua presença digital e te mostro, com clareza, os pontos de melhoria e oportunidades de crescimento.`;
   }
 
   async gerarRespostaIA(historico, ultimaMensagem, lead) {
