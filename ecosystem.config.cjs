@@ -2,7 +2,8 @@ module.exports = {
   apps: [{
     name: 'lead-machine',
     script: 'src/index.js',
-    cwd: '/opt/lead-machine',
+    // Garante que o processo rode no mesmo clone onde este arquivo está.
+    cwd: __dirname,
     interpreter: 'node',
     env: { NODE_ENV: 'production' },
     max_memory_restart: '512M',
