@@ -14,12 +14,9 @@ export class Orchestrator {
     this.ativo    = false;
     this.stats    = { processados: 0, enviados: 0, erros: 0 };
     this._enviandoPara = new Set();
-    this._respondendoPara = new Set(); // [FIX] Lock por numero para evitar respostas duplas
+    this._respondendoPara = new Set();
   }
 
-  // ─────────────────────────────────────────────
-  //  ENVIO EM PARTES — comportamento humano
-  // ─────────────────────────────────────────────
   async enviarEmPartes(numero, partes) {
     const resultados = [];
 
@@ -27,9 +24,8 @@ export class Orchestrator {
       const parte = partes[i];
       if (!parte.trim()) continue;
 
-      // Delay entre partes (simula pessoa pensando e digitando)
       if (i > 0) {
-        const pausaMs = 4000 + Math.random() * 6000; // 4-10s entre partes
+        const pausaMs = 4000 + Math.random() * 6000;
         logger.info(`  ⌨️  Parte ${i+1}/${partes.length} — aguardando ${(pausaMs/1000).toFixed(0)}s...`);
         await new Promise(r => setTimeout(r, pausaMs));
       }
@@ -48,9 +44,6 @@ export class Orchestrator {
     return resultados.every(r => r.sucesso);
   }
 
-  // ─────────────────────────────────────────────
-  //  CICLO DE PROSPECÇÃO
-  // ─────────────────────────────────────────────
   async executarCiclo({ segmento, cidade, limite = 20 }) {
     if (!this.horarioOk()) { logger.info('⏰ Fora do horário.'); return; }
 
@@ -68,6 +61,7 @@ export class Orchestrator {
         emp.segmento = segmento; emp.cidade = cidade;
         await this.processarEmpresa(emp);
         this.stats.processados++;
+
         const espera = this.delay();
         logger.info(`⏳ ${(espera/1000).toFixed(0)}s até próxima...\n`);
         await new Promise(r => setTimeout(r, espera));
@@ -95,7 +89,9 @@ export class Orchestrator {
       logger.info(`  🔍 Analisando: ${emp.site}`);
       const analise = await this.analyzer.analisar(emp.site);
       diag = await db.salvarDiag(lead.id, analise);
+
       logger.info(`  📈 Score: ${analise.score}/100 | Problemas: ${analise.problemas.length}`);
+
       if (!lead.whatsapp && analise.whatsapp_encontrado) {
         const wp = `55${analise.whatsapp_encontrado}`;
         await db.update(lead.id, { whatsapp: wp });
@@ -116,7 +112,10 @@ export class Orchestrator {
 
     try {
       const valido = await this.whatsapp.verificarNumero(lead.whatsapp);
-      if (!valido) { await db.update(lead.id, { status: 'numero_invalido' }); return; }
+      if (!valido) {
+        await db.update(lead.id, { status: 'numero_invalido' });
+        return;
+      }
 
       const msg = await this.builder.construirInicial(lead, diag);
       const ok  = await this.whatsapp.enviarMensagem(lead.whatsapp, msg);
@@ -126,119 +125,71 @@ export class Orchestrator {
         await db.msg(lead.id, 'enviado', msg);
         this.stats.enviados++;
         logger.info(`  ✅ Enviado!`);
-      } else { this.stats.erros++; }
+      } else {
+        this.stats.erros++;
+      }
+
     } finally {
       setTimeout(() => this._enviandoPara.delete(lead.whatsapp), 60000);
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  PROCESSAR RESPOSTA — envio em partes
-  // ─────────────────────────────────────────────
-  async processarResposta(numero, texto) {
-    // [FIX DUPLICATA] Evita processar a mesma conversa em paralelo
-    if (this._respondendoPara.has(numero)) {
-      logger.warn(`⚠️ Ja respondendo ${numero}, ignorando chamada paralela`);
-      return;
-    }
-    this._respondendoPara.add(numero);
-    try {
-      await this._processarRespostaInterno(numero, texto);
-    } finally {
-      this._respondendoPara.delete(numero);
-    }
-  }
-
-  async _processarRespostaInterno(numero, texto) {
-    logger.info(`\n${'─'.repeat(50)}`);
-    logger.info(`📩 RESPOSTA de ${numero}`);
-    logger.info(`   "${texto.substring(0, 80)}${texto.length > 80 ? '...' : ''}"`);
-
-    const lead = await db.porWhatsAppCompleto(numero);
-    if (!lead) { logger.warn(`  ⚠️  Número não está na base`); return; }
-
-    logger.info(`  🏢 ${lead.nome_empresa} | Status: ${lead.status}`);
-
-    if (this.builder.ehMensagemDeStop(texto)) {
-      logger.info(`  🚫 Lead pediu para parar`);
-      await db.update(lead.id, { status: 'descartado' });
-      await db.msg(lead.id, 'recebido', texto);
-      await this.whatsapp.enviarMensagem(numero, `Entendido! Não entrarei mais em contato. Boa sorte! 👊`);
-      return;
-    }
-
-    const ehBot = this.builder.detectarBot(texto);
-    if (ehBot) {
-      logger.info(`  🤖 Bot adversário detectado`);
-      await db.update(lead.id, { status: 'bot_detectado' });
-    }
-
-    await db.msg(lead.id, 'recebido', texto);
-    await db.update(lead.id, { status: 'respondeu', data_resposta: new Date() });
-
-    const interesse = await this.builder.classificarInteresse(texto);
-    await db.update(lead.id, { interesse });
-    logger.info(`  🌡️  Interesse: ${interesse.toUpperCase()}`);
-
-    // Delay inicial — simula pessoa vendo e pensando antes de começar a digitar
-    const delayInicial = ehBot
-      ? 3000 + Math.random() * 2000
-      : 15000 + Math.random() * 35000; // 15-50s para parecer humano
-
-    logger.info(`  ⏳ Iniciando resposta em ${(delayInicial/1000).toFixed(0)}s...`);
-    await new Promise(r => setTimeout(r, delayInicial));
-
-    // Gerar resposta em partes
-    const diagnostico = lead.diagnosticos?.[0] || null;
-    const historico   = lead.conversas || [];
-
-    const { partes, estagio } = await this.builder.gerarRespostaEmPartes(
-      historico, texto, lead, diagnostico
-    );
-
-    logger.info(`  💬 ${partes.length} parte(s) para enviar`);
-
-    // Enviar em partes com delays entre elas
-    const sucesso = await this.enviarEmPartes(numero, partes);
-
-    if (sucesso) {
-      const textoCompleto = partes.join('\n\n');
-      await db.msg(lead.id, 'enviado', textoCompleto);
-
-      if (textoCompleto.includes(process.env.CALENDLY_LINK || 'calendly')) {
-        await db.update(lead.id, { status: 'link_enviado' });
-        logger.info(`  🔗 Link de agendamento enviado!`);
-      }
-    }
-
-    if (interesse === 'quente') await db.update(lead.id, { status: 'quente' });
-    else if (interesse === 'frio') await db.update(lead.id, { status: 'frio' });
-  }
-
-  // ─────────────────────────────────────────────
-  //  FOLLOW-UP
-  // ─────────────────────────────────────────────
   async executarFollowUp() {
     if (!this.horarioOk()) return;
+
     logger.info('\n🔄 Follow-ups...');
     const leads = await db.buscarParaFollowUp();
     logger.info(`  ${leads.length} leads`);
 
     for (const lead of leads) {
-      const tentativa = (lead.followup_count || 0) + 1;
-      if (tentativa > 3) { await db.update(lead.id, { status: 'perdido' }); continue; }
 
-      const diagnostico = await db.buscarDiagnostico(lead.id);
-      const conversas   = await db.buscarConversas(lead.id);
-      const msg = await this.builder.gerarFollowUp(lead, conversas, diagnostico, tentativa);
-      const ok  = await this.whatsapp.enviarMensagem(lead.whatsapp, msg);
-
-      if (ok.sucesso) {
-        await db.update(lead.id, { status: 'followup_enviado', followup_count: tentativa });
-        await db.msg(lead.id, 'enviado', msg);
-        logger.info(`  ✓ Follow-up #${tentativa}: ${lead.nome_empresa}`);
+      // 🔒 Bloqueio anti-duplicação
+      if (this._enviandoPara.has(lead.whatsapp)) {
+        logger.warn(`  🔒 Follow-up bloqueado (duplicado): ${lead.whatsapp}`);
+        continue;
       }
-      await new Promise(r => setTimeout(r, this.delay()));
+      this._enviandoPara.add(lead.whatsapp);
+
+      try {
+
+        const tentativa = (lead.followup_count || 0) + 1;
+
+        if (tentativa > 3) {
+          await db.update(lead.id, { status: 'perdido' });
+          continue;
+        }
+
+        const diagnostico = await db.buscarDiagnostico(lead.id);
+        const conversas   = await db.buscarConversas(lead.id);
+
+        const msg = await this.builder.gerarFollowUp(
+          lead,
+          conversas,
+          diagnostico,
+          tentativa
+        );
+
+        const ok = await this.whatsapp.enviarMensagem(
+          lead.whatsapp,
+          msg
+        );
+
+        if (ok.sucesso) {
+          await db.update(lead.id, {
+            status: 'followup_enviado',
+            followup_count: tentativa
+          });
+
+          await db.msg(lead.id, 'enviado', msg);
+
+          logger.info(`  ✓ Follow-up #${tentativa}: ${lead.nome_empresa}`);
+        }
+
+        await new Promise(r => setTimeout(r, this.delay()));
+
+      } finally {
+        setTimeout(() => this._enviandoPara.delete(lead.whatsapp), 60000);
+      }
     }
   }
 
@@ -249,13 +200,32 @@ export class Orchestrator {
 
   horarioOk() {
     const n = new Date(), d = n.getDay();
-    if (process.env.ALLOW_WEEKENDS !== 'true' && (d === 0 || d === 6)) return false;
+
+    if (process.env.ALLOW_WEEKENDS !== 'true' && (d === 0 || d === 6)) {
+      return false;
+    }
+
     const h = n.getHours();
-    const [hi] = (process.env.HORARIO_INICIO || '09:00').split(':').map(Number);
-    const [hf] = (process.env.HORARIO_FIM || '23:59').split(':').map(Number);
+
+    const [hi] = (process.env.HORARIO_INICIO || '09:00')
+      .split(':')
+      .map(Number);
+
+    const [hf] = (process.env.HORARIO_FIM || '23:59')
+      .split(':')
+      .map(Number);
+
     return h >= hi && h < hf;
   }
 
-  pausar() { this.ativo = false; }
-  get status() { return { ativo: this.ativo, stats: this.stats }; }
+  pausar() {
+    this.ativo = false;
+  }
+
+  get status() {
+    return {
+      ativo: this.ativo,
+      stats: this.stats
+    };
+  }
 }
