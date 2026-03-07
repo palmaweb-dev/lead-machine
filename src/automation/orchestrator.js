@@ -8,6 +8,7 @@ import { logger } from '../utils/logger.js';
 export class Orchestrator {
 
   constructor() {
+
     this.scraper  = new MapsScraper();
     this.analyzer = new SiteAnalyzer();
     this.whatsapp = new WhatsAppClient();
@@ -23,7 +24,12 @@ export class Orchestrator {
 
     this._enviandoPara = new Set();
     this._respondendoPara = new Set();
+
   }
+
+  // =================================
+  // ENVIO EM PARTES
+  // =================================
 
   async enviarEmPartes(numero, partes) {
 
@@ -40,7 +46,7 @@ export class Orchestrator {
         const pausaMs = 4000 + Math.random() * 6000;
 
         logger.info(
-          `  ⌨️  Parte ${i+1}/${partes.length} — aguardando ${(pausaMs/1000).toFixed(0)}s...`
+          `⌨️ Parte ${i+1}/${partes.length} aguardando ${(pausaMs/1000).toFixed(0)}s`
         );
 
         await new Promise(r => setTimeout(r, pausaMs));
@@ -53,12 +59,12 @@ export class Orchestrator {
 
       if (!ok.sucesso) {
 
-        logger.error(`  ❌ Falha ao enviar parte ${i+1}`);
+        logger.error(`❌ Falha ao enviar parte ${i+1}`);
         break;
 
       }
 
-      logger.info(`  ✅ Parte ${i+1}/${partes.length} enviada`);
+      logger.info(`✅ Parte ${i+1}/${partes.length} enviada`);
 
     }
 
@@ -66,17 +72,21 @@ export class Orchestrator {
 
   }
 
+  // =================================
+  // PROSPECÇÃO
+  // =================================
+
   async executarCiclo({ segmento, cidade, limite = 20 }) {
 
     if (!this.horarioOk()) {
 
-      logger.info('⏰ Fora do horário.');
+      logger.info('⏰ Fora do horário');
       return;
 
     }
 
     logger.info(
-      `\n${'═'.repeat(55)}\n🚀 PROSPECÇÃO: ${segmento} | ${cidade} | ${limite} leads\n${'═'.repeat(55)}`
+      `🚀 PROSPECÇÃO: ${segmento} | ${cidade}`
     );
 
     this.ativo = true;
@@ -104,7 +114,7 @@ export class Orchestrator {
         if (!this.ativo) break;
 
         emp.segmento = segmento;
-        emp.cidade   = cidade;
+        emp.cidade = cidade;
 
         await this.processarEmpresa(emp);
 
@@ -112,27 +122,31 @@ export class Orchestrator {
 
         const espera = this.delay();
 
-        logger.info(`⏳ ${(espera/1000).toFixed(0)}s até próxima...\n`);
+        logger.info(`⏳ ${(espera/1000).toFixed(0)}s até próxima`);
 
         await new Promise(r => setTimeout(r, espera));
 
       }
 
-    } catch (e) {
+    } catch (err) {
 
-      logger.error(`Erro: ${e.message}`);
+      logger.error(err.message);
 
     } finally {
 
       this.ativo = false;
 
       logger.info(
-        `\n📊 Processados: ${this.stats.processados} | Enviados: ${this.stats.enviados} | Erros: ${this.stats.erros}`
+        `📊 Processados: ${this.stats.processados} | Enviados: ${this.stats.enviados}`
       );
 
     }
 
   }
+
+  // =================================
+  // PROCESSAR EMPRESA
+  // =================================
 
   async processarEmpresa(emp) {
 
@@ -140,14 +154,11 @@ export class Orchestrator {
 
     const lead = await db.salvarLead(emp);
 
-    if (!lead) {
-      this.stats.erros++;
-      return;
-    }
+    if (!lead) return;
 
     if (lead.status !== 'novo') {
 
-      logger.info(`  ⏭️  Já contatado (${lead.status})`);
+      logger.info(`⏭️ Já contatado`);
       return;
 
     }
@@ -156,15 +167,11 @@ export class Orchestrator {
 
     if (emp.site) {
 
-      logger.info(`  🔍 Analisando: ${emp.site}`);
+      logger.info(`🔍 Analisando ${emp.site}`);
 
       const analise = await this.analyzer.analisar(emp.site);
 
       diag = await db.salvarDiag(lead.id, analise);
-
-      logger.info(
-        `  📈 Score: ${analise.score}/100 | Problemas: ${analise.problemas.length}`
-      );
 
       if (!lead.whatsapp && analise.whatsapp_encontrado) {
 
@@ -181,13 +188,15 @@ export class Orchestrator {
     if (!lead.whatsapp) {
 
       await db.update(lead.id, { status: 'sem_contato' });
+
       return;
 
     }
 
     if (this._enviandoPara.has(lead.whatsapp)) {
 
-      logger.warn(`  🔒 Duplicata bloqueada`);
+      logger.warn(`🔒 Duplicata bloqueada`);
+
       return;
 
     }
@@ -201,6 +210,7 @@ export class Orchestrator {
       if (!valido) {
 
         await db.update(lead.id, { status: 'numero_invalido' });
+
         return;
 
       }
@@ -223,99 +233,25 @@ export class Orchestrator {
 
         this.stats.enviados++;
 
-        logger.info(`  ✅ Enviado!`);
-
-      } else {
-
-        this.stats.erros++;
+        logger.info(`✅ Enviado`);
 
       }
 
     } finally {
 
-      setTimeout(
-        () => this._enviandoPara.delete(lead.whatsapp),
-        60000
-      );
+      setTimeout(() => {
+
+        this._enviandoPara.delete(lead.whatsapp)
+
+      }, 60000);
 
     }
 
   }
 
-  async executarFollowUp() {
-
-    if (!this.horarioOk()) return;
-
-    logger.info('\n🔄 Follow-ups...');
-
-    const leads = await db.buscarParaFollowUp();
-
-    logger.info(`  ${leads.length} leads`);
-
-    for (const lead of leads) {
-
-      if (this._enviandoPara.has(lead.whatsapp)) {
-
-        logger.warn(`  🔒 Follow-up bloqueado: ${lead.whatsapp}`);
-        continue;
-
-      }
-
-      this._enviandoPara.add(lead.whatsapp);
-
-      try {
-
-        const tentativa = (lead.followup_count || 0) + 1;
-
-        if (tentativa > 3) {
-
-          await db.update(lead.id, { status: 'perdido' });
-          continue;
-
-        }
-
-        const diagnostico = await db.buscarDiagnostico(lead.id);
-        const conversas   = await db.buscarConversas(lead.id);
-
-        const msg = await this.builder.gerarFollowUp(
-          lead,
-          conversas,
-          diagnostico,
-          tentativa
-        );
-
-        const ok = await this.whatsapp.enviarMensagem(
-          lead.whatsapp,
-          msg
-        );
-
-        if (ok.sucesso) {
-
-          await db.update(lead.id, {
-            status: 'followup_enviado',
-            followup_count: tentativa
-          });
-
-          await db.msg(lead.id, 'enviado', msg);
-
-          logger.info(`  ✓ Follow-up #${tentativa}: ${lead.nome_empresa}`);
-
-        }
-
-        await new Promise(r => setTimeout(r, this.delay()));
-
-      } finally {
-
-        setTimeout(
-          () => this._enviandoPara.delete(lead.whatsapp),
-          60000
-        );
-
-      }
-
-    }
-
-  }
+  // =================================
+  // RESPOSTAS DO WHATSAPP
+  // =================================
 
   async processarResposta(numero, texto, timestamp) {
 
@@ -344,7 +280,7 @@ export class Orchestrator {
       await db.msg(lead.id, 'recebido', texto);
 
       const diagnostico = await db.buscarDiagnostico(lead.id);
-      const conversas   = await db.buscarConversas(lead.id);
+      const conversas = await db.buscarConversas(lead.id);
 
       const resposta = await this.builder.gerarResposta(
         lead,
@@ -369,18 +305,71 @@ export class Orchestrator {
 
     } catch (err) {
 
-      logger.error(`❌ Erro ao responder: ${err.message}`);
+      logger.error(`Erro resposta: ${err.message}`);
 
     } finally {
 
-      setTimeout(
-        () => this._respondendoPara.delete(numero),
-        10000
-      );
+      setTimeout(() => {
+
+        this._respondendoPara.delete(numero)
+
+      }, 10000);
 
     }
 
   }
+
+  // =================================
+  // FOLLOW UP
+  // =================================
+
+  async executarFollowUp() {
+
+    const leads = await db.buscarParaFollowUp();
+
+    for (const lead of leads) {
+
+      if (this._enviandoPara.has(lead.whatsapp)) continue;
+
+      this._enviandoPara.add(lead.whatsapp);
+
+      try {
+
+        const tentativa = (lead.followup_count || 0) + 1;
+
+        const msg = await this.builder.gerarFollowUp(lead);
+
+        const ok = await this.whatsapp.enviarMensagem(
+          lead.whatsapp,
+          msg
+        );
+
+        if (ok.sucesso) {
+
+          await db.update(lead.id, {
+            status: 'followup_enviado',
+            followup_count: tentativa
+          });
+
+          await db.msg(lead.id, 'enviado', msg);
+
+        }
+
+      } finally {
+
+        setTimeout(() => {
+
+          this._enviandoPara.delete(lead.whatsapp)
+
+        }, 60000);
+
+      }
+
+    }
+
+  }
+
+  // =================================
 
   delay() {
 
@@ -393,12 +382,6 @@ export class Orchestrator {
   horarioOk() {
 
     const n = new Date();
-    const d = n.getDay();
-
-    if (process.env.ALLOW_WEEKENDS !== 'true' && (d === 0 || d === 6)) {
-      return false;
-    }
-
     const h = n.getHours();
 
     const [hi] = (process.env.HORARIO_INICIO || '09:00')
@@ -414,7 +397,9 @@ export class Orchestrator {
   }
 
   pausar() {
+
     this.ativo = false;
+
   }
 
   get status() {
