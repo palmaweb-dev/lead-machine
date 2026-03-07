@@ -15,8 +15,11 @@ const sb = createClient(
   process.env.SUPABASE_KEY
 );
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+// =============================
+// BODY PARSER (corrigido)
+// =============================
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(express.static(join(__dirname, 'public')));
 
 
@@ -92,35 +95,45 @@ app.post('/api/pausar', auth, (_, res) => {
 
 
 // =============================
-// WEBHOOK UAZAPI (substituiu Evolution API)
+// WEBHOOK UAZAPI
 // =============================
 app.post('/webhook/whatsapp', async (req, res) => {
 
   try {
 
     console.log('🔥 WEBHOOK RECEBIDO');
-    console.log(JSON.stringify(req.body, null, 2));
 
     const body = req.body;
 
-    // [FIX DUPLICATA] A Uaizap pode disparar o mesmo evento 2x
-    // Usa o messageid para detectar e bloquear duplicatas (janela de 30s)
+    // =============================
+    // FIX DUPLICATA UAIZAPI
+    // =============================
     const _msgId = body?.message?.messageid || body?.data?.messageid;
+
     if (_msgId) {
+
       if (global._uazapiMsgCache?.has(_msgId)) {
-        console.log('Duplicata ignorada:', _msgId);
+        console.log('⚠️ Duplicata ignorada:', _msgId);
         return res.sendStatus(200);
       }
-      if (!global._uazapiMsgCache) global._uazapiMsgCache = new Map();
+
+      if (!global._uazapiMsgCache) {
+        global._uazapiMsgCache = new Map();
+      }
+
       global._uazapiMsgCache.set(_msgId, Date.now());
-      setTimeout(() => global._uazapiMsgCache?.delete(_msgId), 30000);
+
+      setTimeout(() => {
+        global._uazapiMsgCache?.delete(_msgId);
+      }, 30000);
+
     }
 
     if (!body) {
       return res.sendStatus(200);
     }
 
-    // Parse usando seu orchestrator
+    // Parse usando orchestrator
     const m = orchestrator.whatsapp.parsearWebhook(body);
 
     if (m?.texto) {
@@ -130,10 +143,10 @@ app.post('/webhook/whatsapp', async (req, res) => {
       console.log('💬 Texto:', m.texto);
 
       await orchestrator.processarResposta(
-      m.numero,
-      m.texto,
-      m.timestamp
-    );
+        m.numero,
+        m.texto,
+        m.timestamp
+      );
 
     } else {
 
@@ -162,27 +175,52 @@ app.get('/', (_, res) => {
 
 
 // =============================
-// START SERVER
+// CONFIGURAÇÕES
 // =============================
 
-// Configuracoes
 app.get('/api/configuracoes', auth, async (req, res) => {
-  const { data } = await sb.from('configuracoes').select('id, valor');
+
+  const { data } = await sb
+    .from('configuracoes')
+    .select('id, valor');
+
   const configs = {};
-  (data || []).forEach(row => { configs[row.id] = row.valor; });
+
+  (data || []).forEach(row => {
+    configs[row.id] = row.valor;
+  });
+
   res.json(configs);
+
 });
 
 app.post('/api/configuracoes', auth, async (req, res) => {
+
   const { id, valor } = req.body;
-    const { error } = await sb.from('configuracoes').upsert({ id, valor, updated_at: new Date() }, { onConflict: 'id' });
-  if (error) return res.status(500).json({ erro: error.message });
+
+  const { error } = await sb
+    .from('configuracoes')
+    .upsert(
+      { id, valor, updated_at: new Date() },
+      { onConflict: 'id' }
+    );
+
+  if (error) {
+    return res.status(500).json({ erro: error.message });
+  }
+
   res.json({ ok: true });
+
 });
 
 app.get('/configuracoes', (req, res) => {
   res.sendFile(join(__dirname, 'public', 'settings.html'));
 });
+
+
+// =============================
+// START SERVER
+// =============================
 
 const PORT = process.env.PORT || 3000;
 
