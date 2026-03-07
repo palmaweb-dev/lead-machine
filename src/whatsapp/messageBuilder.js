@@ -4,6 +4,46 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export class MessageBuilder {
 
+  limitarRespostaWhatsApp(texto) {
+    if (!texto) return '';
+
+    const linhas = texto
+      .split(/\n+/)
+      .map(linha => linha.replace(/^[-*\d.)\s]+/, '').trim())
+      .filter(Boolean);
+
+    const frases = linhas.flatMap(linha => {
+      const partes = linha.match(/[^.!?]+[.!?]?/g) || [];
+      return partes.map(parte => parte.trim()).filter(Boolean);
+    });
+
+    const unicas = [];
+    const vistos = new Set();
+
+    for (const frase of frases) {
+      const chave = frase
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\p{L}\p{N}\s]/gu, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!chave || vistos.has(chave)) continue;
+
+      vistos.add(chave);
+      unicas.push(frase);
+
+      if (unicas.length >= 3) break;
+    }
+
+    if (!unicas.length) {
+      return 'Entendi. Como posso te ajudar?';
+    }
+
+    return unicas.join('\n');
+  }
+
   normalizarTextoWhatsApp(texto) {
     if (!texto) return texto;
 
@@ -68,7 +108,12 @@ ${historico.map(m => `${m.direcao === 'enviado' ? 'Você' : 'Cliente'}: ${m.mens
 Responda de forma natural, breve (máximo 3 parágrafos curtos), sem exagerar na formalidade.
 Se detectar interesse real, ofereça o link de agendamento.
 Se houver objeção, contorne com empatia.
-Não use listas, não use asteriscos excessivos.`;
+Regras obrigatórias de formato para WhatsApp:
+- Responda com no máximo 3 frases curtas.
+- Cada frase deve ter apenas 1 ideia.
+- Evite repetir a mesma informação com palavras diferentes.
+- Para perguntas simples, use 1 ou 2 frases.
+- Não use listas, bullets ou múltiplas interpretações da pergunta.`;
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -77,7 +122,9 @@ Não use listas, não use asteriscos excessivos.`;
       messages: [{ role: 'user', content: prompt }]
     });
 
-    return this.normalizarTextoWhatsApp(response.choices[0].message.content);
+    const conteudo = response.choices[0].message.content;
+    const normalizado = this.normalizarTextoWhatsApp(conteudo);
+    return this.limitarRespostaWhatsApp(normalizado);
   }
 
   async classificarInteresse(mensagem) {
