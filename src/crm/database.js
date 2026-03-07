@@ -15,6 +15,14 @@ function limparNumero(numero) {
     .replace(/\D/g,'')
 }
 
+function numeroSemNove(numero) {
+
+  if (!numero) return null
+
+  return numero.replace(/^(\d{4})9(\d+)/, '$1$2')
+
+}
+
 export const db = {
 
   // =============================
@@ -27,13 +35,19 @@ export const db = {
 
       const numero = limparNumero(emp.whatsapp)
 
+      if (!numero) return null
+
+      const numeroAlt = numeroSemNove(numero)
+
       const { data: existente } = await sb
         .from('leads')
         .select('*')
-        .eq('whatsapp', numero)
-        .maybeSingle()
+        .or(`whatsapp.eq.${numero},whatsapp.eq.${numeroAlt}`)
+        .limit(1)
 
-      if (existente) return existente
+      if (existente && existente.length > 0) {
+        return existente[0]
+      }
 
       const { data, error } = await sb
         .from('leads')
@@ -78,12 +92,15 @@ export const db = {
 
       const numeroLimpo = limparNumero(numero)
 
+      if (!numeroLimpo) return null
+
+      const numeroAlt = numeroSemNove(numeroLimpo)
+
       const { data, error } = await sb
         .from('leads')
         .select('*')
-        .ilike('whatsapp', `%${numeroLimpo}`)
+        .or(`whatsapp.eq.${numeroLimpo},whatsapp.eq.${numeroAlt}`)
         .limit(1)
-        .maybeSingle()
 
       if (error) {
 
@@ -93,7 +110,7 @@ export const db = {
 
       }
 
-      return data || null
+      return data?.[0] || null
 
     } catch (err) {
 
