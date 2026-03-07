@@ -1,6 +1,8 @@
+import 'dotenv/config'
+
 import express from 'express'
 import { createClient } from '@supabase/supabase-js'
-import { orchestrator } from '../scheduler/cron.js'
+import { orchestrator } from '../automation/orchestrator.js'
 import { db } from '../crm/database.js'
 import { logger } from '../utils/logger.js'
 import { dirname, join } from 'path'
@@ -15,20 +17,16 @@ const sb = createClient(
   process.env.SUPABASE_KEY
 )
 
-
 // =============================
 // BODY PARSER
 // =============================
-
-app.use(express.json({ limit: "50mb" }))
-app.use(express.urlencoded({ extended: true, limit: "50mb" }))
+app.use(express.json({ limit: '50mb' }))
+app.use(express.urlencoded({ extended: true, limit: '50mb' }))
 app.use(express.static(join(__dirname, 'public')))
-
 
 // =============================
 // AUTH DASHBOARD
 // =============================
-
 const auth = (req, res, next) => {
 
   if (req.headers['x-api-key'] === process.env.DASHBOARD_SECRET) {
@@ -36,9 +34,7 @@ const auth = (req, res, next) => {
   }
 
   res.status(401).json({ erro: 'Não autorizado' })
-
 }
-
 
 // =============================
 // API DASHBOARD
@@ -55,15 +51,15 @@ app.get('/api/metricas', auth, async (_, res) => {
 
 })
 
-
 app.get('/api/leads', auth, async (req, res) => {
 
-  res.json(
-    await db.listar(parseInt(req.query.p) || 0)
-  )
+  const pagina = parseInt(req.query.p) || 0
+
+  const leads = await db.listar(pagina)
+
+  res.json(leads)
 
 })
-
 
 app.get('/api/leads/:id/msgs', auth, async (req, res) => {
 
@@ -77,25 +73,20 @@ app.get('/api/leads/:id/msgs', auth, async (req, res) => {
 
 })
 
-
 app.post('/api/iniciar', auth, async (req, res) => {
 
   const { segmento, cidade, limite } = req.body
 
   if (!segmento || !cidade) {
-
     return res.status(400).json({
       erro: 'segmento e cidade obrigatórios'
     })
-
   }
 
   if (orchestrator.status.ativo) {
-
     return res.status(409).json({
       erro: 'Prospecção já em andamento'
     })
-
   }
 
   orchestrator
@@ -113,7 +104,6 @@ app.post('/api/iniciar', auth, async (req, res) => {
 
 })
 
-
 app.post('/api/pausar', auth, (_, res) => {
 
   orchestrator.pausar()
@@ -122,97 +112,91 @@ app.post('/api/pausar', auth, (_, res) => {
 
 })
 
+// =============================
+// CACHE DUPLICATA UAIZAP
+// =============================
+const cacheMsg = new Map()
 
 // =============================
-// WEBHOOK UAZAPI
+// WEBHOOK WHATSAPP
 // =============================
 
 app.post('/webhook/whatsapp', async (req, res) => {
 
   try {
 
-    console.log('🔥 WEBHOOK RECEBIDO')
+    logger.info('🔥 WEBHOOK RECEBIDO')
 
     const body = req.body
-
-    console.log(JSON.stringify(body, null, 2))
-
-    // =============================
-    // BLOQUEIO DUPLICATA
-    // =============================
-
-    const _msgId =
-      body?.message?.messageid ||
-      body?.data?.messageid ||
-      body?.messageId
-
-    if (_msgId) {
-
-      if (!global._uazapiMsgCache) {
-        global._uazapiMsgCache = new Map()
-      }
-
-      if (global._uazapiMsgCache.has(_msgId)) {
-
-        console.log('⚠️ Duplicata ignorada:', _msgId)
-
-        return res.sendStatus(200)
-
-      }
-
-      global._uazapiMsgCache.set(_msgId, Date.now())
-
-      setTimeout(() => {
-
-        global._uazapiMsgCache.delete(_msgId)
-
-      }, 30000)
-
-    }
 
     if (!body) {
       return res.sendStatus(200)
     }
 
+    // =============================
+    // ID DA MENSAGEM
+    // =============================
+
+    const msgId =
+      body?.message?.messageid ||
+      body?.data?.messageid ||
+      body?.key?.id
+
+    if (msgId) {
+
+      if (cacheMsg.has(msgId)) {
+
+        logger.warn(`⚠️ Duplicata ignorada: ${msgId}`)
+
+        return res.sendStatus(200)
+
+      }
+
+      cacheMsg.set(msgId, Date.now())
+
+      setTimeout(() => {
+
+        cacheMsg.delete(msgId)
+
+      }, 30000)
+
+    }
 
     // =============================
-    // PARSE DO WEBHOOK
+    // PARSE DA MENSAGEM
     // =============================
 
     const m = orchestrator.whatsapp.parsearWebhook(body)
 
+    if (!m || !m.texto) {
 
-    if (m?.texto) {
+      logger.warn('⚠️ Webhook sem texto')
 
-      console.log('📩 Mensagem recebida')
-      console.log('👤 Número:', m.numero)
-      console.log('💬 Texto:', m.texto)
-
-      // CHAMA O ORCHESTRATOR
-      await orchestrator.processarResposta(
-        m.numero,
-        m.texto,
-        m.timestamp
-      )
-
-    } else {
-
-      console.log('⚠️ Webhook sem texto válido')
+      return res.sendStatus(200)
 
     }
+
+    logger.info(`📩 Mensagem recebida`)
+    logger.info(`👤 Número: ${m.numero}`)
+    logger.info(`💬 Texto: ${m.texto}`)
+
+    await orchestrator.processarResposta(
+      m.numero,
+      m.texto,
+      m.timestamp
+    )
 
     res.sendStatus(200)
 
   } catch (err) {
 
-    console.error('❌ ERRO WEBHOOK:', err)
+    logger.error(`❌ ERRO WEBHOOK: ${err.message}`)
 
     res.sendStatus(500)
 
   }
 
 })
-
 
 // =============================
 // HEALTH CHECK
@@ -223,7 +207,6 @@ app.get('/', (_, res) => {
   res.send('LEAD MACHINE ONLINE')
 
 })
-
 
 // =============================
 // CONFIGURAÇÕES
@@ -247,7 +230,6 @@ app.get('/api/configuracoes', auth, async (req, res) => {
 
 })
 
-
 app.post('/api/configuracoes', auth, async (req, res) => {
 
   const { id, valor } = req.body
@@ -255,8 +237,14 @@ app.post('/api/configuracoes', auth, async (req, res) => {
   const { error } = await sb
     .from('configuracoes')
     .upsert(
-      { id, valor, updated_at: new Date() },
-      { onConflict: 'id' }
+      {
+        id,
+        valor,
+        updated_at: new Date()
+      },
+      {
+        onConflict: 'id'
+      }
     )
 
   if (error) {
@@ -271,15 +259,11 @@ app.post('/api/configuracoes', auth, async (req, res) => {
 
 })
 
-
 app.get('/configuracoes', (req, res) => {
 
-  res.sendFile(
-    join(__dirname, 'public', 'settings.html')
-  )
+  res.sendFile(join(__dirname, 'public', 'settings.html'))
 
 })
-
 
 // =============================
 // START SERVER
@@ -288,6 +272,11 @@ app.get('/configuracoes', (req, res) => {
 const PORT = process.env.PORT || 3000
 
 app.listen(PORT, () => {
+
+  logger.info('')
+  logger.info('🤖 LEAD MACHINE v1.0')
+  logger.info('📡 Prospecção B2B Automatizada')
+  logger.info('')
 
   logger.info(`✅ Dashboard: http://localhost:${PORT}`)
 
