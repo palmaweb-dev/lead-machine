@@ -1,25 +1,6 @@
 import { OpenAI } from 'openai';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// [FIX] Carregar configuracoes dinamicas do Supabase
-import { createClient } from '@supabase/supabase-js';
-const _sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-let _configCache = null;
-let _configCacheTime = 0;
-async function getConfigs() {
-  // Cache de 60s para nao bater no banco a cada mensagem
-  if (_configCache && Date.now() - _configCacheTime < 60000) return _configCache;
-  try {
-    const { data } = await _sb.from('configuracoes').select('id, valor');
-    const configs = {};
-    (data || []).forEach(row => { configs[row.id] = row.valor; });
-    _configCache = configs;
-    _configCacheTime = Date.now();
-    return configs;
-  } catch(e) { return _configCache || {}; }
-}
-
-
 const PADROES_BOT = [
   /obrigad[ao] por entrar em contato/i,
   /estou aqui para ajudar/i,
@@ -78,17 +59,12 @@ function detectarEstagio(conversas, ultimaMensagem) {
   };
 }
 
-function buildSystemPrompt(lead, diagnostico, estagio, contexto, config = {}) {
-  // [FIX] Usar configuracoes dinamicas do banco
-  const persona    = config?.persona_bot || {};
-  const nomeBot    = persona.nome || 'Eduardo';
-  const cargoBot   = persona.cargo || 'Estrategista de Marketing Digital';
-  const calendly   = persona.calendly || process.env.CALENDLY_LINK || '';
-  const objetivoBot = persona.objetivo || 'Agendar uma Sessão Estratégica gratuita de 30 minutos';
+function buildSystemPrompt(lead, diagnostico, estagio, contexto) {
+  const calendly = process.env.CALENDLY_LINK;
   const problemas = diagnostico?.problemas?.join(', ') || 'presença digital fraca';
   const score = diagnostico?.score ?? 'N/A';
 
-  return `Você é ${nomeBot}, ${cargoBot}.
+  return `Você é Rafael, estrategista sênior de marketing digital com 10 anos de experiência.
 Você está conversando com um potencial cliente via WhatsApp.
 
 EMPRESA PROSPECTADA: ${lead.nome_empresa}
@@ -106,7 +82,7 @@ SUA PERSONALIDADE:
 - Frases curtas. Parágrafos curtos. Máximo 3 parágrafos por mensagem
 - Uma pergunta por mensagem no máximo
 
-SEU ÚNICO OBJETIVO: ${objetivoBot}
+SEU ÚNICO OBJETIVO: Agendar uma Sessão Estratégica gratuita de 30 minutos
 
 ESTÁGIO ATUAL DO LEAD:
 - Respostas até agora: ${estagio.totalRespostas}
@@ -154,41 +130,9 @@ REGRAS ABSOLUTAS:
 - Se pediu pra parar: agradeça e encerre com elegância`;
 }
 
-
-// ============================================
-//  DIVIDIR RESPOSTA EM PARTES HUMANAS
-// ============================================
-function dividirEmPartes(texto) {
-  // Dividir pelo marcador [PAUSA]
-  let partes = texto.split(/\[PAUSA\]/gi)
-    .map(p => p.trim())
-    .filter(p => p.length > 0);
-
-  // Se nao tiver [PAUSA], dividir por paragrafos duplos
-  if (partes.length === 1) {
-    partes = texto.split(/\n\n+/)
-      .map(p => p.trim())
-      .filter(p => p.length > 0);
-  }
-
-  // [FIX] Detectar mensagens simples/conversacionais: limitar a 1-2 partes
-  const textoLower = texto.toLowerCase();
-  const ehMensagemSimples = (
-    texto.length < 100 ||
-    /boa noite|bom dia|boa tarde|tchau|ate logo|obrigad|de nada|ok\b|entendido|certo|perfeito/i.test(textoLower)
-  );
-  const limite = ehMensagemSimples ? 2 : 3;
-
-  // Limitar ao maximo definido
-  return partes.slice(0, limite);
-}
-
 export class MessageBuilder {
 
-  async construirInicial(lead, diag) {
-    // [FIX] Carregar templates do banco em vez de hardcoded
-    const config = await getConfigs();
-    const dbTemplates = config?.mensagens_prospeccao?.templates;
+  construirInicial(lead, diag) {
     const empresa = lead.nome_empresa;
     const segmento = lead.segmento || 'sua área';
     const problema = diag?.problemas?.[0] || '';
@@ -210,7 +154,7 @@ export class MessageBuilder {
       }
     }
 
-    const templates = (dbTemplates && dbTemplates.length > 0) ? dbTemplates.map(t => t.replace('{empresa}', empresa).replace('{observacao}', observacao)) : [
+    const templates = [
       `Oi! Pesquisando empresas do segmento de ${segmento}, acabei chegando no site da *${empresa}*.\n\nNotei que ${observacao} — isso pode estar custando clientes sem que você perceba.\n\nFaço diagnósticos gratuitos pra esse tipo de situação. Posso te mostrar o que encontrei?`,
       `Olá! Vi o site da *${empresa}* enquanto fazia uma análise de empresas da região.\n\nNotei que ${observacao} — esse é um ponto que pode impactar diretamente na geração de clientes online.\n\nPosso te apresentar um diagnóstico completo em uma Sessão Estratégica *gratuita*, onde analiso sua presença digital e te mostro os pontos de melhoria?`,
       `Oi! Estava analisando a presença digital de algumas empresas da região e o site da *${empresa}* apareceu pra mim.\n\nNotei que ${observacao}.\n\nTrabalho com posicionamento estratégico e acredito que consigo te mostrar melhorias práticas. Posso te mandar um diagnóstico gratuito?`,
@@ -226,8 +170,6 @@ export class MessageBuilder {
   async classificarInteresse(mensagem) {
     if (!process.env.OPENAI_API_KEY) return 'morno';
     try {
-    // [FIX] Carregar configs dinamicas do banco
-    const config = await getConfigs();
       const r = await openai.chat.completions.create({
         model: 'gpt-4o-mini', max_tokens: 5, temperature: 0,
         messages: [{ role: 'user', content:
@@ -261,14 +203,12 @@ MENSAGENS JÁ ENVIADAS POR VOCÊ: ${totalEnviados}`;
     }));
 
     try {
-    // [FIX] Carregar configs dinamicas do banco
-    const config = await getConfigs();
       const r = await openai.chat.completions.create({
         model: 'gpt-4o',
         max_tokens: 350,
         temperature: 0.85,
         messages: [
-          { role: 'system', content: buildSystemPrompt(lead, diagnostico, estagio, contexto, config) },
+          { role: 'system', content: buildSystemPrompt(lead, diagnostico, estagio, contexto) },
           ...historico,
           { role: 'user', content: novaMensagem }
         ]
@@ -279,20 +219,7 @@ MENSAGENS JÁ ENVIADAS POR VOCÊ: ${totalEnviados}`;
     }
   }
 
-
-  // [FIX] Wrapper que divide a resposta em partes e retorna { partes, estagio }
-  // Chamado pelo orchestrator em vez de gerarResposta
-  async gerarRespostaEmPartes(conversas, novaMensagem, lead, diagnostico) {
-    const estagio = detectarEstagio(conversas || [], novaMensagem);
-    try {
-      const textoCompleto = await this.gerarResposta(conversas, novaMensagem, lead, diagnostico);
-      return { partes: dividirEmPartes(textoCompleto), estagio };
-    } catch {
-      return { partes: [this.respostaFallback(estagio)], estagio };
-    }
-  }
-
-    respostaFallback(estagio) {
+  respostaFallback(estagio) {
     const calendly = process.env.CALENDLY_LINK;
     if (estagio.isQuente && !estagio.jaOfertouLink) {
       return `Que bom! Vou te mandar o link pra você escolher o melhor horário — conversa rápida de 30 min, sem compromisso:\n\n${calendly}`;
@@ -316,8 +243,6 @@ MENSAGENS JÁ ENVIADAS POR VOCÊ: ${totalEnviados}`;
 
     if (process.env.OPENAI_API_KEY && tentativa <= 2) {
       try {
-    // [FIX] Carregar configs dinamicas do banco
-    const config = await getConfigs();
         const r = await openai.chat.completions.create({
           model: 'gpt-4o-mini', max_tokens: 150, temperature: 0.8,
           messages: [{ role: 'user', content:

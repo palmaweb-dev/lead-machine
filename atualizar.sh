@@ -1,24 +1,26 @@
+#!/bin/bash
+# ══════════════════════════════════════════════════
+#   LEAD MACHINE — Script de Atualização v2
+#   Cole e execute na VPS: bash atualizar.sh
+# ══════════════════════════════════════════════════
+
+GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
+
+echo -e "${CYAN}\n🔄 Atualizando Lead Machine para v2...\n${NC}"
+
+cd /opt/lead-machine
+
+# ── Backup dos arquivos atuais ──────────────────
+echo -e "${YELLOW}→ Fazendo backup dos arquivos atuais...${NC}"
+cp src/whatsapp/messageBuilder.js src/whatsapp/messageBuilder.backup.js
+cp src/automation/orchestrator.js src/automation/orchestrator.backup.js
+echo -e "${GREEN}✓ Backup salvo${NC}"
+
+# ── messageBuilder_v2 ───────────────────────────
+echo -e "${YELLOW}→ Atualizando messageBuilder.js...${NC}"
+cat > src/whatsapp/messageBuilder.js << 'EOF'
 import { OpenAI } from 'openai';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// [FIX] Carregar configuracoes dinamicas do Supabase
-import { createClient } from '@supabase/supabase-js';
-const _sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-let _configCache = null;
-let _configCacheTime = 0;
-async function getConfigs() {
-  // Cache de 60s para nao bater no banco a cada mensagem
-  if (_configCache && Date.now() - _configCacheTime < 60000) return _configCache;
-  try {
-    const { data } = await _sb.from('configuracoes').select('id, valor');
-    const configs = {};
-    (data || []).forEach(row => { configs[row.id] = row.valor; });
-    _configCache = configs;
-    _configCacheTime = Date.now();
-    return configs;
-  } catch(e) { return _configCache || {}; }
-}
-
 
 const PADROES_BOT = [
   /obrigad[ao] por entrar em contato/i,
@@ -78,17 +80,12 @@ function detectarEstagio(conversas, ultimaMensagem) {
   };
 }
 
-function buildSystemPrompt(lead, diagnostico, estagio, contexto, config = {}) {
-  // [FIX] Usar configuracoes dinamicas do banco
-  const persona    = config?.persona_bot || {};
-  const nomeBot    = persona.nome || 'Eduardo';
-  const cargoBot   = persona.cargo || 'Estrategista de Marketing Digital';
-  const calendly   = persona.calendly || process.env.CALENDLY_LINK || '';
-  const objetivoBot = persona.objetivo || 'Agendar uma Sessão Estratégica gratuita de 30 minutos';
+function buildSystemPrompt(lead, diagnostico, estagio, contexto) {
+  const calendly = process.env.CALENDLY_LINK;
   const problemas = diagnostico?.problemas?.join(', ') || 'presença digital fraca';
   const score = diagnostico?.score ?? 'N/A';
 
-  return `Você é ${nomeBot}, ${cargoBot}.
+  return `Você é Rafael, estrategista sênior de marketing digital com 10 anos de experiência.
 Você está conversando com um potencial cliente via WhatsApp.
 
 EMPRESA PROSPECTADA: ${lead.nome_empresa}
@@ -106,7 +103,7 @@ SUA PERSONALIDADE:
 - Frases curtas. Parágrafos curtos. Máximo 3 parágrafos por mensagem
 - Uma pergunta por mensagem no máximo
 
-SEU ÚNICO OBJETIVO: ${objetivoBot}
+SEU ÚNICO OBJETIVO: Agendar uma Sessão Estratégica gratuita de 30 minutos
 
 ESTÁGIO ATUAL DO LEAD:
 - Respostas até agora: ${estagio.totalRespostas}
@@ -154,41 +151,9 @@ REGRAS ABSOLUTAS:
 - Se pediu pra parar: agradeça e encerre com elegância`;
 }
 
-
-// ============================================
-//  DIVIDIR RESPOSTA EM PARTES HUMANAS
-// ============================================
-function dividirEmPartes(texto) {
-  // Dividir pelo marcador [PAUSA]
-  let partes = texto.split(/\[PAUSA\]/gi)
-    .map(p => p.trim())
-    .filter(p => p.length > 0);
-
-  // Se nao tiver [PAUSA], dividir por paragrafos duplos
-  if (partes.length === 1) {
-    partes = texto.split(/\n\n+/)
-      .map(p => p.trim())
-      .filter(p => p.length > 0);
-  }
-
-  // [FIX] Detectar mensagens simples/conversacionais: limitar a 1-2 partes
-  const textoLower = texto.toLowerCase();
-  const ehMensagemSimples = (
-    texto.length < 100 ||
-    /boa noite|bom dia|boa tarde|tchau|ate logo|obrigad|de nada|ok\b|entendido|certo|perfeito/i.test(textoLower)
-  );
-  const limite = ehMensagemSimples ? 2 : 3;
-
-  // Limitar ao maximo definido
-  return partes.slice(0, limite);
-}
-
 export class MessageBuilder {
 
-  async construirInicial(lead, diag) {
-    // [FIX] Carregar templates do banco em vez de hardcoded
-    const config = await getConfigs();
-    const dbTemplates = config?.mensagens_prospeccao?.templates;
+  construirInicial(lead, diag) {
     const empresa = lead.nome_empresa;
     const segmento = lead.segmento || 'sua área';
     const problema = diag?.problemas?.[0] || '';
@@ -210,7 +175,7 @@ export class MessageBuilder {
       }
     }
 
-    const templates = (dbTemplates && dbTemplates.length > 0) ? dbTemplates.map(t => t.replace('{empresa}', empresa).replace('{observacao}', observacao)) : [
+    const templates = [
       `Oi! Pesquisando empresas do segmento de ${segmento}, acabei chegando no site da *${empresa}*.\n\nNotei que ${observacao} — isso pode estar custando clientes sem que você perceba.\n\nFaço diagnósticos gratuitos pra esse tipo de situação. Posso te mostrar o que encontrei?`,
       `Olá! Vi o site da *${empresa}* enquanto fazia uma análise de empresas da região.\n\nNotei que ${observacao} — esse é um ponto que pode impactar diretamente na geração de clientes online.\n\nPosso te apresentar um diagnóstico completo em uma Sessão Estratégica *gratuita*, onde analiso sua presença digital e te mostro os pontos de melhoria?`,
       `Oi! Estava analisando a presença digital de algumas empresas da região e o site da *${empresa}* apareceu pra mim.\n\nNotei que ${observacao}.\n\nTrabalho com posicionamento estratégico e acredito que consigo te mostrar melhorias práticas. Posso te mandar um diagnóstico gratuito?`,
@@ -226,8 +191,6 @@ export class MessageBuilder {
   async classificarInteresse(mensagem) {
     if (!process.env.OPENAI_API_KEY) return 'morno';
     try {
-    // [FIX] Carregar configs dinamicas do banco
-    const config = await getConfigs();
       const r = await openai.chat.completions.create({
         model: 'gpt-4o-mini', max_tokens: 5, temperature: 0,
         messages: [{ role: 'user', content:
@@ -261,14 +224,12 @@ MENSAGENS JÁ ENVIADAS POR VOCÊ: ${totalEnviados}`;
     }));
 
     try {
-    // [FIX] Carregar configs dinamicas do banco
-    const config = await getConfigs();
       const r = await openai.chat.completions.create({
         model: 'gpt-4o',
         max_tokens: 350,
         temperature: 0.85,
         messages: [
-          { role: 'system', content: buildSystemPrompt(lead, diagnostico, estagio, contexto, config) },
+          { role: 'system', content: buildSystemPrompt(lead, diagnostico, estagio, contexto) },
           ...historico,
           { role: 'user', content: novaMensagem }
         ]
@@ -279,20 +240,7 @@ MENSAGENS JÁ ENVIADAS POR VOCÊ: ${totalEnviados}`;
     }
   }
 
-
-  // [FIX] Wrapper que divide a resposta em partes e retorna { partes, estagio }
-  // Chamado pelo orchestrator em vez de gerarResposta
-  async gerarRespostaEmPartes(conversas, novaMensagem, lead, diagnostico) {
-    const estagio = detectarEstagio(conversas || [], novaMensagem);
-    try {
-      const textoCompleto = await this.gerarResposta(conversas, novaMensagem, lead, diagnostico);
-      return { partes: dividirEmPartes(textoCompleto), estagio };
-    } catch {
-      return { partes: [this.respostaFallback(estagio)], estagio };
-    }
-  }
-
-    respostaFallback(estagio) {
+  respostaFallback(estagio) {
     const calendly = process.env.CALENDLY_LINK;
     if (estagio.isQuente && !estagio.jaOfertouLink) {
       return `Que bom! Vou te mandar o link pra você escolher o melhor horário — conversa rápida de 30 min, sem compromisso:\n\n${calendly}`;
@@ -316,8 +264,6 @@ MENSAGENS JÁ ENVIADAS POR VOCÊ: ${totalEnviados}`;
 
     if (process.env.OPENAI_API_KEY && tentativa <= 2) {
       try {
-    // [FIX] Carregar configs dinamicas do banco
-    const config = await getConfigs();
         const r = await openai.chat.completions.create({
           model: 'gpt-4o-mini', max_tokens: 150, temperature: 0.8,
           messages: [{ role: 'user', content:
@@ -342,3 +288,231 @@ MENSAGENS JÁ ENVIADAS POR VOCÊ: ${totalEnviados}`;
     ].some(p => p.test(texto));
   }
 }
+EOF
+
+echo -e "${GREEN}✓ messageBuilder.js atualizado${NC}"
+
+# ── orchestrator_v2 ─────────────────────────────
+echo -e "${YELLOW}→ Atualizando orchestrator.js...${NC}"
+cat > src/automation/orchestrator.js << 'EOF'
+import { MapsScraper } from '../prospecting/mapsScraper.js';
+import { SiteAnalyzer } from '../analyzer/siteAnalyzer.js';
+import { WhatsAppClient } from '../whatsapp/whatsappClient.js';
+import { MessageBuilder } from '../whatsapp/messageBuilder.js';
+import { db } from '../crm/database.js';
+import { logger } from '../utils/logger.js';
+
+export class Orchestrator {
+  constructor() {
+    this.scraper  = new MapsScraper();
+    this.analyzer = new SiteAnalyzer();
+    this.whatsapp = new WhatsAppClient();
+    this.builder  = new MessageBuilder();
+    this.ativo    = false;
+    this.stats    = { processados: 0, enviados: 0, erros: 0 };
+    this._enviandoPara = new Set();
+  }
+
+  async executarCiclo({ segmento, cidade, limite = 20 }) {
+    if (!this.horarioOk()) { logger.info('⏰ Fora do horário permitido.'); return; }
+
+    logger.info(`\n${'═'.repeat(55)}\n🚀 PROSPECÇÃO: ${segmento} | ${cidade} | limite: ${limite}\n${'═'.repeat(55)}`);
+    this.ativo = true;
+    this.stats = { processados: 0, enviados: 0, erros: 0 };
+
+    try {
+      await this.scraper.init();
+      const empresas = await this.scraper.buscarEmpresas(segmento, cidade, limite);
+      await this.scraper.fechar();
+
+      for (const emp of empresas) {
+        if (!this.ativo) break;
+        emp.segmento = segmento;
+        emp.cidade = cidade;
+        await this.processarEmpresa(emp);
+        this.stats.processados++;
+        const espera = this.delay();
+        logger.info(`⏳ ${(espera / 1000).toFixed(0)}s até próxima...\n`);
+        await new Promise(r => setTimeout(r, espera));
+      }
+    } catch (e) {
+      logger.error(`Erro crítico: ${e.message}`);
+    } finally {
+      this.ativo = false;
+      logger.info(`\n📊 Processados: ${this.stats.processados} | Enviados: ${this.stats.enviados} | Erros: ${this.stats.erros}`);
+    }
+  }
+
+  async processarEmpresa(emp) {
+    logger.info(`📊 ${emp.nome_empresa}`);
+    const lead = await db.salvarLead(emp);
+    if (!lead) { this.stats.erros++; return; }
+
+    // ANTI-DUPLICATA: verificar status
+    if (lead.status !== 'novo') {
+      logger.info(`  ⏭️  Já contatado (${lead.status}) — pulando`);
+      return;
+    }
+
+    let diag = null;
+    if (emp.site) {
+      logger.info(`  🔍 Analisando: ${emp.site}`);
+      const analise = await this.analyzer.analisar(emp.site);
+      diag = await db.salvarDiag(lead.id, analise);
+      logger.info(`  📈 Score: ${analise.score}/100 | Problemas: ${analise.problemas.length}`);
+      if (!lead.whatsapp && analise.whatsapp_encontrado) {
+        const wp = `55${analise.whatsapp_encontrado}`;
+        await db.update(lead.id, { whatsapp: wp });
+        lead.whatsapp = wp;
+      }
+    }
+
+    if (!lead.whatsapp) {
+      logger.warn(`  ⚠️  Sem WhatsApp`);
+      await db.update(lead.id, { status: 'sem_contato' });
+      return;
+    }
+
+    // ANTI-DUPLICATA: lock por número
+    if (this._enviandoPara.has(lead.whatsapp)) {
+      logger.warn(`  🔒 Duplicata bloqueada: ${lead.whatsapp}`);
+      return;
+    }
+    this._enviandoPara.add(lead.whatsapp);
+
+    try {
+      const valido = await this.whatsapp.verificarNumero(lead.whatsapp);
+      if (!valido) { await db.update(lead.id, { status: 'numero_invalido' }); return; }
+
+      const msg = this.builder.construirInicial(lead, diag);
+      const ok  = await this.whatsapp.enviarMensagem(lead.whatsapp, msg);
+
+      if (ok.sucesso) {
+        await db.update(lead.id, { status: 'contatado', data_contato: new Date() });
+        await db.msg(lead.id, 'enviado', msg);
+        this.stats.enviados++;
+        logger.info(`  ✅ Mensagem enviada!`);
+      } else { this.stats.erros++; }
+    } finally {
+      setTimeout(() => this._enviandoPara.delete(lead.whatsapp), 60000);
+    }
+  }
+
+  async processarResposta(numero, texto) {
+    logger.info(`\n${'─'.repeat(50)}`);
+    logger.info(`📩 RESPOSTA de ${numero}: "${texto.substring(0, 80)}..."`);
+
+    const lead = await db.porWhatsAppCompleto(numero);
+    if (!lead) { logger.warn(`  ⚠️  Número não está na base`); return; }
+
+    logger.info(`  🏢 ${lead.nome_empresa} | Status: ${lead.status}`);
+
+    // Mensagem de stop
+    if (this.builder.ehMensagemDeStop(texto)) {
+      logger.info(`  🚫 Lead pediu para parar`);
+      await db.update(lead.id, { status: 'descartado' });
+      await db.msg(lead.id, 'recebido', texto);
+      await this.whatsapp.enviarMensagem(numero, `Entendido! Não vou mais entrar em contato. Boa sorte com o negócio! 👊`);
+      return;
+    }
+
+    const ehBot = this.builder.detectarBot(texto);
+    if (ehBot) { logger.info(`  🤖 Bot adversário detectado`); await db.update(lead.id, { status: 'bot_detectado' }); }
+
+    await db.msg(lead.id, 'recebido', texto);
+    await db.update(lead.id, { status: 'respondeu', data_resposta: new Date() });
+
+    const interesse = await this.builder.classificarInteresse(texto);
+    await db.update(lead.id, { interesse });
+    logger.info(`  🌡️  Interesse: ${interesse.toUpperCase()}`);
+
+    const delayMs = ehBot ? 3000 + Math.random() * 2000 : 10000 + Math.random() * 20000;
+    logger.info(`  ⏳ Respondendo em ${(delayMs / 1000).toFixed(0)}s...`);
+    await new Promise(r => setTimeout(r, delayMs));
+
+    const diagnostico = lead.diagnosticos?.[0] || null;
+    const historico   = lead.conversas || [];
+
+    const resposta = await this.builder.gerarResposta(historico, texto, lead, diagnostico);
+    const ok = await this.whatsapp.enviarMensagem(numero, resposta);
+
+    if (ok.sucesso) {
+      await db.msg(lead.id, 'enviado', resposta);
+      logger.info(`  ✅ Resposta enviada`);
+      if (resposta.includes(process.env.CALENDLY_LINK || 'calendly')) {
+        await db.update(lead.id, { status: 'link_enviado' });
+        logger.info(`  🔗 Link de agendamento enviado!`);
+      }
+    }
+
+    if (interesse === 'quente') await db.update(lead.id, { status: 'quente' });
+    else if (interesse === 'frio') await db.update(lead.id, { status: 'frio' });
+  }
+
+  async executarFollowUp() {
+    if (!this.horarioOk()) return;
+    logger.info('\n🔄 Follow-ups inteligentes...');
+    const leads = await db.buscarParaFollowUp();
+    logger.info(`  ${leads.length} leads`);
+
+    for (const lead of leads) {
+      const tentativa = (lead.followup_count || 0) + 1;
+      if (tentativa > 3) { await db.update(lead.id, { status: 'perdido' }); continue; }
+
+      const diagnostico = await db.buscarDiagnostico(lead.id);
+      const conversas   = await db.buscarConversas(lead.id);
+      const msg = await this.builder.gerarFollowUp(lead, conversas, diagnostico, tentativa);
+      const ok  = await this.whatsapp.enviarMensagem(lead.whatsapp, msg);
+
+      if (ok.sucesso) {
+        await db.update(lead.id, { status: 'followup_enviado', followup_count: tentativa });
+        await db.msg(lead.id, 'enviado', msg);
+        logger.info(`  ✓ Follow-up #${tentativa}: ${lead.nome_empresa}`);
+      }
+      await new Promise(r => setTimeout(r, this.delay()));
+    }
+  }
+
+  delay() {
+    const b = parseInt(process.env.DELAY_ENTRE_MENSAGENS) || 50000;
+    return b + (Math.random() * b * 0.4) - (b * 0.2);
+  }
+
+  horarioOk() {
+    const n = new Date(), d = n.getDay();
+    if (d === 0 || d === 6) return false;
+    const h = n.getHours();
+    const [hi] = (process.env.HORARIO_INICIO || '09:00').split(':').map(Number);
+    const [hf] = (process.env.HORARIO_FIM || '23:59').split(':').map(Number);
+    return h >= hi && h < hf;
+  }
+
+  pausar() { this.ativo = false; }
+  get status() { return { ativo: this.ativo, stats: this.stats }; }
+}
+EOF
+
+echo -e "${GREEN}✓ orchestrator.js atualizado${NC}"
+
+# ── Adicionar followup_count no banco ───────────
+echo -e "${YELLOW}→ Nota: rode este SQL no Supabase SQL Editor:${NC}"
+echo -e "   ALTER TABLE leads ADD COLUMN IF NOT EXISTS followup_count INTEGER DEFAULT 0;"
+
+# ── Reiniciar aplicação ──────────────────────────
+echo -e "\n${YELLOW}→ Reiniciando Lead Machine...${NC}"
+pm2 restart lead-machine --update-env
+sleep 3
+pm2 status
+
+echo -e "\n${GREEN}╔══════════════════════════════════════════╗"
+echo -e "║  ✅  Atualização concluída com sucesso!   ║"
+echo -e "║                                          ║"
+echo -e "║  O bot agora:                            ║"
+echo -e "║  ✓ Lê todo o histórico da conversa       ║"
+echo -e "║  ✓ Detecta e rebate objeções             ║"
+echo -e "║  ✓ Detecta bots adversários              ║"
+echo -e "║  ✓ Bloqueia mensagens duplicadas         ║"
+echo -e "║  ✓ Follow-up inteligente em 3 etapas     ║"
+echo -e "╚══════════════════════════════════════════╝${NC}\n"
+
+echo -e "Monitorar logs: ${CYAN}pm2 logs lead-machine${NC}"

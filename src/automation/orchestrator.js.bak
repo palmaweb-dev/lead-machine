@@ -1,0 +1,234 @@
+import { MapsScraper } from '../prospecting/mapsScraper.js';
+import { SiteAnalyzer } from '../analyzer/siteAnalyzer.js';
+import { WhatsAppClient } from '../whatsapp/whatsappClient.js';
+import { MessageBuilder } from '../whatsapp/messageBuilder.js';
+import { db } from '../crm/database.js';
+import { logger } from '../utils/logger.js';
+
+export class Orchestrator {
+  constructor() {
+    this.scraper  = new MapsScraper();
+    this.analyzer = new SiteAnalyzer();
+    this.whatsapp = new WhatsAppClient();
+    this.builder  = new MessageBuilder();
+    this.ativo    = false;
+    this.stats    = { processados: 0, enviados: 0, erros: 0 };
+  }
+
+  // ──────────────────────────────────────────
+  //  CICLO DE PROSPECÇÃO
+  // ──────────────────────────────────────────
+  async executarCiclo({ segmento, cidade, limite = 20 }) {
+    if (!this.horarioOk()) {
+      logger.info('⏰ Fora do horário permitido.');
+      return;
+    }
+
+    logger.info(`\n${'═'.repeat(50)}\n🚀 ${segmento} | ${cidade} | limite: ${limite}\n${'═'.repeat(50)}`);
+    this.ativo = true;
+    this.stats = { processados: 0, enviados: 0, erros: 0 };
+
+    try {
+      await this.scraper.init();
+      const empresas = await this.scraper.buscarEmpresas(segmento, cidade, limite);
+      await this.scraper.fechar();
+
+      for (const emp of empresas) {
+        if (!this.ativo) break;
+        emp.segmento = segmento;
+        emp.cidade = cidade;
+        await this.processarEmpresa(emp);
+        this.stats.processados++;
+
+        const espera = this.delay();
+        logger.info(`⏳ ${(espera / 1000).toFixed(0)}s até próxima...\n`);
+        await new Promise(r => setTimeout(r, espera));
+      }
+    } catch (e) {
+      logger.error(`Erro crítico no ciclo: ${e.message}`);
+    } finally {
+      this.ativo = false;
+      logger.info(`📊 Processados: ${this.stats.processados} | Enviados: ${this.stats.enviados} | Erros: ${this.stats.erros}`);
+    }
+  }
+
+  async processarEmpresa(emp) {
+    logger.info(`📊 ${emp.nome_empresa}`);
+
+    const lead = await db.salvarLead(emp);
+    if (!lead) { this.stats.erros++; return; }
+
+    // Analisar site
+    let diag = null;
+    if (emp.site) {
+      logger.info(`  🔍 Analisando: ${emp.site}`);
+      const analise = await this.analyzer.analisar(emp.site);
+      diag = await db.salvarDiag(lead.id, analise);
+      logger.info(`  📈 Score: ${analise.score}/100 | Problemas: ${analise.problemas.length}`);
+
+      if (!lead.whatsapp && analise.whatsapp_encontrado) {
+        const wp = `55${analise.whatsapp_encontrado}`;
+        await db.update(lead.id, { whatsapp: wp });
+        lead.whatsapp = wp;
+      }
+    }
+
+    if (!lead.whatsapp) {
+      logger.warn(`  ⚠️  Sem WhatsApp`);
+      await db.update(lead.id, { status: 'sem_contato' });
+      return;
+    }
+
+    const valido = await this.whatsapp.verificarNumero(lead.whatsapp);
+    if (!valido) {
+      await db.update(lead.id, { status: 'numero_invalido' });
+      return;
+    }
+
+    const msg = this.builder.construirInicial(lead, diag);
+    const ok = await this.whatsapp.enviarMensagem(lead.whatsapp, msg);
+
+    if (ok.sucesso) {
+      await db.update(lead.id, { status: 'contatado', data_contato: new Date() });
+      await db.msg(lead.id, 'enviado', msg);
+      this.stats.enviados++;
+      logger.info(`  ✅ Mensagem enviada!`);
+    } else {
+      this.stats.erros++;
+    }
+  }
+
+  // ──────────────────────────────────────────
+  //  PROCESSAR RESPOSTA DO CLIENTE (WEBHOOK)
+  // ──────────────────────────────────────────
+  async processarResposta(numero, texto) {
+    logger.info(`\n📩 RESPOSTA de ${numero}`);
+    logger.info(`   Mensagem: "${texto.substring(0, 80)}${texto.length > 80 ? '...' : ''}"`);
+
+    // Buscar lead com histórico completo e diagnóstico
+    const lead = await db.porWhatsAppCompleto(numero);
+    if (!lead) {
+      logger.warn(`  ⚠️  Lead não encontrado para ${numero}`);
+      return;
+    }
+
+    logger.info(`  🏢 Empresa: ${lead.nome_empresa}`);
+
+    // Registrar mensagem recebida
+    await db.msg(lead.id, 'recebido', texto);
+    await db.update(lead.id, { status: 'respondeu', data_resposta: new Date() });
+
+    // Detectar bot adversário
+    const ehBot = this.builder.detectarBot(texto);
+    if (ehBot) {
+      logger.info(`  🤖 Bot detectado! Aplicando estratégia de bypass...`);
+      await db.update(lead.id, { status: 'bot_detectado' });
+    }
+
+    // Classificar interesse
+    const interesse = await this.builder.classificarInteresse(texto);
+    await db.update(lead.id, { interesse });
+    logger.info(`  🌡️  Interesse: ${interesse.toUpperCase()}`);
+
+    // Se explicitamente não quer contato, parar
+    if (this.mensagemDeStop(texto)) {
+      logger.info(`  🚫 Cliente pediu para parar. Encerrando contato.`);
+      await db.update(lead.id, { status: 'descartado' });
+      return;
+    }
+
+    // Delay humanizado (simula pessoa digitando e pensando)
+    const delay = ehBot
+      ? 2000 + Math.random() * 3000      // responde rápido para bot
+      : 8000 + Math.random() * 15000;    // responde devagar para humano
+
+    logger.info(`  ⏳ Aguardando ${(delay / 1000).toFixed(0)}s para responder...`);
+    await new Promise(r => setTimeout(r, delay));
+
+    // Gerar resposta com IA
+    const diagnostico = lead.diagnosticos?.[0] || null;
+    const historico = lead.conversas || [];
+
+    const resposta = await this.builder.gerarResposta(
+      historico,
+      texto,
+      lead,
+      diagnostico
+    );
+
+    // Enviar
+    const ok = await this.whatsapp.enviarMensagem(numero, resposta);
+    if (ok.sucesso) {
+      await db.msg(lead.id, 'enviado', resposta);
+      logger.info(`  ✅ Resposta enviada com sucesso`);
+
+      // Se link de agendamento foi enviado, marcar como quente
+      if (resposta.includes(process.env.CALENDLY_LINK)) {
+        await db.update(lead.id, { status: 'link_enviado' });
+        logger.info(`  🔗 Link de agendamento enviado!`);
+      }
+    }
+
+    // Atualizar interesse se quente
+    if (interesse === 'quente') {
+      await db.update(lead.id, { status: 'quente' });
+    }
+  }
+
+  // ──────────────────────────────────────────
+  //  FOLLOW-UP AUTOMÁTICO (para quem não respondeu)
+  // ──────────────────────────────────────────
+  async executarFollowUp() {
+    logger.info('🔄 Executando follow-ups...');
+
+    const leads = await db.buscarParaFollowUp();
+    logger.info(`  ${leads.length} leads para follow-up`);
+
+    for (const lead of leads) {
+      if (!this.horarioOk()) break;
+
+      const msg = this.builder.construirFollowUp(lead);
+      const ok = await this.whatsapp.enviarMensagem(lead.whatsapp, msg);
+
+      if (ok.sucesso) {
+        await db.update(lead.id, { status: 'followup_enviado' });
+        await db.msg(lead.id, 'enviado', msg);
+        logger.info(`  ✓ Follow-up: ${lead.nome_empresa}`);
+      }
+
+      await new Promise(r => setTimeout(r, this.delay()));
+    }
+  }
+
+  // ──────────────────────────────────────────
+  //  UTILITÁRIOS
+  // ──────────────────────────────────────────
+  mensagemDeStop(texto) {
+    const stops = [
+      /não me (mande|envie|contate|chame)/i,
+      /me (tire|remova) (da lista|daqui|do grupo)/i,
+      /para de me (mandar|enviar)/i,
+      /não tenho interesse/i,
+      /stop|sair|cancelar|descadastrar/i,
+      /não quero mais/i,
+    ];
+    return stops.some(p => p.test(texto));
+  }
+
+  delay() {
+    const b = parseInt(process.env.DELAY_ENTRE_MENSAGENS) || 50000;
+    return b + (Math.random() * b * 0.4) - (b * 0.2);
+  }
+
+  horarioOk() {
+    const n = new Date(), d = n.getDay();
+    if (d === 0 || d === 6) return false;
+    const h = n.getHours();
+    const [hi] = (process.env.HORARIO_INICIO || '09:00').split(':').map(Number);
+    const [hf] = (process.env.HORARIO_FIM || '17:30').split(':').map(Number);
+    return h >= hi && h < hf;
+  }
+
+  pausar() { this.ativo = false; }
+  get status() { return { ativo: this.ativo, stats: this.stats }; }
+}

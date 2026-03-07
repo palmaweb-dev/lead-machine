@@ -31,7 +31,8 @@ export class MapsScraper {
     await this.page.route('**/*.{png,jpg,jpeg,gif,svg,woff,woff2,ttf}', r => r.abort());
   }
 
-  async buscarEmpresas(keyword, cidade, limite = 20) {
+  async buscarEmpresas({ segmento, cidade, limite = 20 }) {
+    const keyword = segmento;
     const query = `${keyword} em ${cidade}`;
     const url = `https://www.google.com/maps/search/${encodeURIComponent(query)}`;
     logger.info(`🔍 Buscando: "${query}"`);

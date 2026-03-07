@@ -60,7 +60,7 @@ export class Orchestrator {
 
     try {
       await this.scraper.init();
-      const empresas = await this.scraper.buscarEmpresas({ segmento, cidade, limite });
+      const empresas = await this.scraper.buscarEmpresas(segmento, cidade, limite);
       await this.scraper.fechar();
 
       for (const emp of empresas) {

@@ -883,45 +883,6 @@
     .nav-item {
       scroll-behavior: smooth;
     }
-
-    /* Pagination */
-    .pagination-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      padding: 20px 0 8px;
-      flex-wrap: wrap;
-    }
-    .pagination-container button {
-      background: var(--bg-card);
-      color: var(--text-primary);
-      border: 1px solid var(--border);
-      padding: 8px 18px;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      font-size: 0.85rem;
-      font-family: inherit;
-      transition: var(--transition);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .pagination-container button:hover:not(:disabled) {
-      background: var(--bg-card-hover);
-      border-color: var(--secondary);
-      box-shadow: var(--glow-secondary);
-    }
-    .pagination-container button:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-    }
-    .pagination-info {
-      color: var(--text-secondary);
-      font-size: 0.85rem;
-      min-width: 140px;
-      text-align: center;
-    }
   </style>
 </head>
 <body>
@@ -952,10 +913,16 @@
         Prospecção
       </a>
       <div class="nav-section-label">Sistema</div>
-      <a href="/configuracoes" class="nav-item">
-          <i data-lucide="settings"></i>
-          Configurações
-        </a>
+      <a href="#" class="nav-item disabled" onclick="event.preventDefault()">
+        <i data-lucide="message-circle"></i>
+        WhatsApp
+        <span class="nav-badge">Em breve</span>
+      </a>
+      <a href="#" class="nav-item disabled" onclick="event.preventDefault()">
+        <i data-lucide="settings"></i>
+        Configurações
+        <span class="nav-badge">Em breve</span>
+      </a>
     </nav>
     <div class="sidebar-footer">
       <div class="sidebar-version">Lead Machine v2.0  Palmaweb</div>
@@ -1092,15 +1059,6 @@
               </tr>
             </tbody>
           </table>
-      <div class="pagination-container" id="pagination-leads">
-        <button id="btn-prev" disabled>
-          <i data-lucide="chevron-left" style="width:16px;height:16px"></i> Anterior
-        </button>
-        <span class="pagination-info" id="pagination-info">Página 1 de 1</span>
-        <button id="btn-next" >
-          Próxima <i data-lucide="chevron-right" style="width:16px;height:16px"></i>
-        </button>
-      </div>
         </div>
       </div>
 
@@ -1108,47 +1066,28 @@
   </div>
 
 <script>
-    // === AUTENTICAO ===
-    const API_KEY = prompt('Senha do painel:');
-    if (API_KEY === null || API_KEY.trim() === '') {
-      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:#f87171;font-family:sans-serif;font-size:1.2rem;">Acesso negado. <a href="/" style="color:#60a5fa;margin-left:8px;">Tentar novamente</a></div>';
-      throw new Error('Login cancelado pelo usurio.');
-    }
-    const h = { 'Content-Type': 'application/json', 'x-api-key': API_KEY.trim() };
+    const API_KEY = prompt('Senha do painel:') || '';
+    const h = { 'Content-Type': 'application/json', 'x-api-key': API_KEY };
 
     // Initialize Lucide icons
     lucide.createIcons();
 
     async function carregarMetricas() {
       const r = await fetch('/api/metricas', { headers: h });
-      if (r.status === 401) {
-        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:#f87171;font-family:sans-serif;font-size:1.2rem;">Senha incorreta. <a href="/" style="color:#60a5fa;margin-left:8px;">Tentar novamente</a></div>';
-        throw new Error('No autorizado.');
-      }
       const m = await r.json();
       document.getElementById('m-total').textContent = m.total_leads || 0;
       document.getElementById('m-enviados').textContent = m.enviados_hoje || 0;
       document.getElementById('m-respostas').textContent = m.responderam_hoje || 0;
-      document.getElementById('m-reunioes').textContent = m.reunioes_agendadas || 0;
+      document.getElementById('m-reunioes').textContent = m.reunioes_hoje || 0;
     }
 
-let paginaAtual = 0;
-  let totalLeads = 0;
-  const LEADS_POR_PAGINA = 30;
-
-  async function carregarLeads(pagina) {
-    if (pagina === undefined || pagina === null) pagina = paginaAtual;
-    try {
-      const r = await fetch('/api/leads?p=' + pagina, { headers: h });
+    async function carregarLeads() {
+      const r = await fetch('/api/leads', { headers: h });
       const leads = await r.json();
       const tbody = document.getElementById('tabela-leads');
 
-      totalLeads = leads.total || 0;
-      paginaAtual = pagina;
-
       if (!leads.leads || leads.leads.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><i data-lucide="inbox"></i><p>Nenhum lead encontrado ainda</p></div></td></tr>';
-        atualizarPaginacao();
         lucide.createIcons();
         return;
       }
@@ -1166,46 +1105,8 @@ let paginaAtual = 0;
           <td><span class="badge ${l.interesse || ''}">${interesseText || ''}</span></td>
         </tr>`;
       }).join('');
-      atualizarPaginacao();
       lucide.createIcons();
-    } catch(err) {
-      console.error('Erro ao carregar leads:', err);
     }
-  }
-
-  function atualizarPaginacao() {
-    const totalPaginas = Math.max(1, Math.ceil(totalLeads / LEADS_POR_PAGINA));
-    const info = document.getElementById('pagination-info');
-    const btnPrev = document.getElementById('btn-prev');
-    const btnNext = document.getElementById('btn-next');
-    if (info) info.textContent = 'Página ' + (paginaAtual + 1) + ' de ' + totalPaginas + ' (' + totalLeads + ' leads)';
-    if (btnPrev) btnPrev.disabled = (paginaAtual <= 0);
-    if (btnNext) btnNext.disabled = (paginaAtual >= totalPaginas - 1);
-  }
-
-  function mudarPagina(direcao) {
-    const totalPaginas = Math.max(1, Math.ceil(totalLeads / LEADS_POR_PAGINA));
-    const novaPagina = paginaAtual + direcao;
-    if (novaPagina < 0 || novaPagina >= totalPaginas) return;
-    paginaAtual = novaPagina;
-    carregarLeads(novaPagina).then(() => {
-      const section = document.getElementById('section-leads');
-      if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  }
-
-  // Bind pagination buttons
-  document.getElementById('btn-prev').addEventListener('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    mudarPagina(-1);
-  });
-  document.getElementById('btn-next').addEventListener('click', function(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    mudarPagina(1);
-  });
-
 
     function formatStatus(status) {
       if (!status) return '';

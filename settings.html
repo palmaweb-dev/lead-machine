@@ -1,0 +1,510 @@
+X<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configurações — Lead Machine</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+.topbar{background:#1e293b;padding:16px 24px;display:flex;align-items:center;gap:16px;border-bottom:1px solid #334155;position:sticky;top:0;z-index:100}
+.topbar a{color:#94a3b8;text-decoration:none;font-size:14px}
+.topbar a:hover{color:#e2e8f0}
+.logo{font-size:18px;font-weight:700;color:#38bdf8}
+.sep{color:#334155}
+.page-title{font-size:15px;color:#e2e8f0;font-weight:600}
+.container{max-width:900px;margin:0 auto;padding:32px 24px}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;margin-bottom:24px;background:#1e293b;padding:6px;border-radius:12px;border:1px solid #334155}
+.tab{flex:1;padding:10px;text-align:center;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:#64748b;transition:.2s;border:none;background:none}
+.tab.active{background:#0f172a;color:#38bdf8}
+.tab:hover:not(.active){color:#94a3b8}
+
+/* Panels */
+.panel{display:none}
+.panel.active{display:block}
+
+/* Cards */
+.card{background:#1e293b;border-radius:12px;padding:24px;margin-bottom:20px;border:1px solid #334155}
+.card-title{font-size:14px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.card-desc{font-size:13px;color:#64748b;margin-bottom:20px}
+
+/* Form */
+label{display:block;font-size:13px;color:#94a3b8;margin-bottom:6px;margin-top:16px}
+label:first-of-type{margin-top:0}
+input[type=text],input[type=number],input[type=time],select,textarea{
+  background:#0f172a;border:1px solid #334155;color:#e2e8f0;
+  padding:10px 14px;border-radius:8px;width:100%;font-size:14px;
+  outline:none;transition:.2s;font-family:inherit}
+input:focus,textarea:focus,select:focus{border-color:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,.1)}
+textarea{resize:vertical;min-height:100px;line-height:1.5}
+.hint{font-size:12px;color:#475569;margin-top:5px}
+.hint code{background:#0f172a;padding:2px 6px;border-radius:4px;color:#38bdf8;font-size:11px}
+
+/* Template editor */
+.template-item{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px;margin-bottom:12px;position:relative}
+.template-num{font-size:11px;color:#475569;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+.template-item textarea{background:#111827;border-color:#1e293b;min-height:120px}
+.btn-remove-tmpl{position:absolute;top:12px;right:12px;background:#7f1d1d;border:none;color:#fca5a5;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer}
+.btn-remove-tmpl:hover{background:#991b1b}
+.btn-add-tmpl{background:#0f172a;border:1px dashed #334155;color:#64748b;padding:10px;border-radius:8px;width:100%;cursor:pointer;font-size:13px;transition:.2s}
+.btn-add-tmpl:hover{border-color:#38bdf8;color:#38bdf8}
+
+/* Dias da semana */
+.days{display:flex;gap:8px;flex-wrap:wrap}
+.day-btn{padding:8px 16px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#64748b;cursor:pointer;font-size:13px;transition:.2s}
+.day-btn.active{background:#0ea5e9;border-color:#0ea5e9;color:#fff}
+
+/* Botões */
+.btns{display:flex;gap:12px;margin-top:24px;justify-content:flex-end}
+.btn{padding:11px 24px;border-radius:8px;border:none;font-size:14px;font-weight:500;cursor:pointer;transition:.2s}
+.btn-primary{background:#0ea5e9;color:#fff}.btn-primary:hover{background:#0284c7}
+.btn-secondary{background:#334155;color:#e2e8f0}.btn-secondary:hover{background:#475569}
+.btn-danger{background:#ef4444;color:#fff}.btn-danger:hover{background:#dc2626}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;background:#10b981;color:#fff;padding:14px 20px;border-radius:10px;font-size:14px;font-weight:500;transform:translateY(100px);opacity:0;transition:.3s;z-index:999}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.error{background:#ef4444}
+
+/* Toggle */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #1e3a5f}
+.toggle-row:last-child{border:none}
+.toggle-info .tl{font-size:14px;color:#e2e8f0}
+.toggle-info .td{font-size:12px;color:#64748b;margin-top:2px}
+.toggle{width:44px;height:24px;background:#334155;border-radius:12px;position:relative;cursor:pointer;transition:.2s;border:none}
+.toggle.on{background:#0ea5e9}
+.toggle::after{content:'';position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;top:3px;left:3px;transition:.2s}
+.toggle.on::after{left:23px}
+
+/* Preview */
+.preview-box{background:#111827;border:1px solid #334155;border-radius:8px;padding:16px;margin-top:12px}
+.preview-label{font-size:11px;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.bubble{background:#1e3a5f;color:#e2e8f0;padding:12px 16px;border-radius:12px 12px 4px 12px;display:inline-block;max-width:85%;font-size:13px;line-height:1.5;white-space:pre-wrap}
+
+.saving{opacity:.6;pointer-events:none}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">🤖 Lead Machine</span>
+  <span class="sep">›</span>
+  <span class="page-title">⚙️ Configurações</span>
+  <div style="flex:1"></div>
+  <a href="/">← Voltar ao Painel</a>
+</div>
+
+<div class="container">
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="setTab('prospeccao')">📢 Prospecção</button>
+    <button class="tab" onclick="setTab('followup')">🔄 Follow-up</button>
+    <button class="tab" onclick="setTab('persona')">🤖 Persona do Bot</button>
+    <button class="tab" onclick="setTab('limites')">⏱️ Limites & Horários</button>
+  </div>
+
+  <!-- ══ PROSPECÇÃO ══ -->
+  <div class="panel active" id="panel-prospeccao">
+    <div class="card">
+      <div class="card-title">Mensagens de Prospecção</div>
+      <div class="card-desc">
+        O bot escolhe aleatoriamente uma dessas mensagens para cada envio.
+        Use as variáveis para personalizar automaticamente.
+      </div>
+
+      <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:12px;margin-bottom:20px">
+        <div style="font-size:12px;color:#38bdf8;font-weight:600;margin-bottom:8px">📌 Variáveis disponíveis:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <span class="hint"><code>{empresa}</code> Nome da empresa</span>
+          <span class="hint"><code>{segmento}</code> Segmento buscado</span>
+          <span class="hint"><code>{problema}</code> Problema encontrado no site</span>
+          <span class="hint"><code>{cidade}</code> Cidade da empresa</span>
+          <span class="hint"><code>{score}</code> Score digital (0-100)</span>
+          <span class="hint"><code>{calendly}</code> Link de agendamento</span>
+        </div>
+      </div>
+
+      <div id="templates-container"></div>
+      <button class="btn-add-tmpl" onclick="adicionarTemplate()">+ Adicionar variação de mensagem</button>
+
+      <div class="btns">
+        <button class="btn btn-secondary" onclick="previewMensagem()">👁 Pré-visualizar</button>
+        <button class="btn btn-primary" onclick="salvar('mensagens_prospeccao')">💾 Salvar</button>
+      </div>
+
+      <div id="preview-prospeccao" style="display:none">
+        <div class="preview-box">
+          <div class="preview-label">Prévia (com dados de exemplo)</div>
+          <div class="bubble" id="preview-text"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ FOLLOW-UP ══ -->
+  <div class="panel" id="panel-followup">
+    <div class="card">
+      <div class="card-title">Follow-up Automático</div>
+      <div class="card-desc">
+        Enviado automaticamente para leads que não responderam.
+        Cada mensagem é enviada com 48h de intervalo.
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="background:#1e3a5f;color:#38bdf8;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600">1ª mensagem — 48h sem resposta</span>
+          </div>
+          <textarea id="followup_1" placeholder="Mensagem de follow-up 1..."></textarea>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="background:#4c1d95;color:#c4b5fd;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600">2ª mensagem — 96h sem resposta</span>
+          </div>
+          <textarea id="followup_2" placeholder="Mensagem de follow-up 2..."></textarea>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="background:#7f1d1d;color:#fca5a5;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600">3ª mensagem — 7 dias (última tentativa)</span>
+          </div>
+          <textarea id="followup_3" placeholder="Mensagem de follow-up 3 (despedida elegante)..."></textarea>
+        </div>
+      </div>
+
+      <div class="hint" style="margin-top:16px">
+        As mesmas variáveis da prospecção estão disponíveis aqui também.
+      </div>
+
+      <div class="btns">
+        <button class="btn btn-primary" onclick="salvar('mensagens_followup')">💾 Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PERSONA ══ -->
+  <div class="panel" id="panel-persona">
+    <div class="card">
+      <div class="card-title">Persona do Bot</div>
+      <div class="card-desc">
+        Defina como o bot se apresenta e se comporta nas conversas com IA.
+      </div>
+
+      <label>Nome do consultor</label>
+      <input type="text" id="persona_nome" placeholder="Ex: Rafael">
+      <div class="hint">O GPT vai se apresentar com esse nome nas conversas</div>
+
+      <label>Cargo / Especialidade</label>
+      <input type="text" id="persona_cargo" placeholder="Ex: Estrategista de Marketing Digital">
+
+      <label>Tom de comunicação</label>
+      <select id="persona_tom">
+        <option value="informal_profissional">Informal profissional (recomendado)</option>
+        <option value="formal">Formal</option>
+        <option value="descontraido">Descontraído</option>
+        <option value="tecnico">Técnico / Consultivo</option>
+      </select>
+
+      <label>Objetivo da conversa</label>
+      <input type="text" id="persona_objetivo" placeholder="Ex: Agendar uma Sessão Estratégica gratuita de 30 minutos">
+
+      <label>Instruções extras para a IA <span style="color:#475569;font-weight:400">(opcional)</span></label>
+      <textarea id="persona_instrucoes" style="min-height:120px"
+        placeholder="Ex: Sempre mencione que atendemos empresas de até R$1M de faturamento. Nunca ofereça desconto. Foque em clínicas e consultórios..."></textarea>
+      <div class="hint">Essas instruções são adicionadas ao prompt do GPT em todas as conversas</div>
+
+      <div class="btns">
+        <button class="btn btn-primary" onclick="salvar('persona_bot')">💾 Salvar</button>
+      </div>
+    </div>
+
+    <!-- IA configuração -->
+    <div class="card">
+      <div class="card-title">Inteligência Artificial</div>
+      <div class="card-desc">Como o bot responde aos clientes</div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="tl">Respostas automáticas com IA</div>
+          <div class="td">GPT-4o lê o histórico e responde de forma personalizada</div>
+        </div>
+        <button class="toggle on" id="toggle-ia" onclick="toggleBtn(this)"></button>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="tl">Detecção de bots adversários</div>
+          <div class="td">Identifica respostas automáticas e tenta chegar em um humano</div>
+        </div>
+        <button class="toggle on" id="toggle-bot-detect" onclick="toggleBtn(this)"></button>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="tl">Classificação de interesse</div>
+          <div class="td">IA classifica cada resposta como frio, morno ou quente</div>
+        </div>
+        <button class="toggle on" id="toggle-classif" onclick="toggleBtn(this)"></button>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="tl">Follow-up gerado por IA</div>
+          <div class="td">GPT personaliza os follow-ups com base no contexto</div>
+        </div>
+        <button class="toggle on" id="toggle-ia-followup" onclick="toggleBtn(this)"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ LIMITES ══ -->
+  <div class="panel" id="panel-limites">
+    <div class="card">
+      <div class="card-title">Limites de Envio</div>
+      <div class="card-desc">Configure para evitar bloqueios no WhatsApp</div>
+
+      <label>Máximo de mensagens por dia</label>
+      <input type="number" id="lim_mensagens" min="1" max="200" placeholder="40">
+      <div class="hint">Recomendado: até 50/dia para contas novas, até 150/dia para contas com mais de 6 meses</div>
+
+      <label>Delay entre mensagens (segundos)</label>
+      <input type="number" id="lim_delay" min="10" max="300" placeholder="50">
+      <div class="hint">Recomendado: mínimo 30s. O sistema adiciona variação aleatória automaticamente</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Horário de Funcionamento</div>
+      <div class="card-desc">O bot só envia mensagens dentro desse período</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <label>Início</label>
+          <input type="time" id="lim_inicio" value="09:00">
+        </div>
+        <div>
+          <label>Fim</label>
+          <input type="time" id="lim_fim" value="23:59">
+        </div>
+      </div>
+
+      <label style="margin-top:20px">Dias da semana</label>
+      <div class="days" id="days-container">
+        <button class="day-btn" data-day="0" onclick="toggleDay(this)">Dom</button>
+        <button class="day-btn active" data-day="1" onclick="toggleDay(this)">Seg</button>
+        <button class="day-btn active" data-day="2" onclick="toggleDay(this)">Ter</button>
+        <button class="day-btn active" data-day="3" onclick="toggleDay(this)">Qua</button>
+        <button class="day-btn active" data-day="4" onclick="toggleDay(this)">Qui</button>
+        <button class="day-btn active" data-day="5" onclick="toggleDay(this)">Sex</button>
+        <button class="day-btn" data-day="6" onclick="toggleDay(this)">Sáb</button>
+      </div>
+
+      <div class="btns">
+        <button class="btn btn-primary" onclick="salvarLimites()">💾 Salvar Configurações</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Link de Agendamento</div>
+      <div class="card-desc">Usado automaticamente quando o lead demonstra interesse</div>
+      <label>URL do Calendly (ou outra ferramenta)</label>
+      <input type="text" id="lim_calendly" placeholder="https://calendly.com/sua-agencia/diagnostico">
+      <div class="btns">
+        <button class="btn btn-primary" onclick="salvarCalendly()">💾 Salvar</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API_KEY = localStorage.getItem('lm_key') || prompt('Senha do painel:');
+localStorage.setItem('lm_key', API_KEY);
+const H = { 'Content-Type': 'application/json', 'x-api-key': API_KEY };
+
+// ── Estado local ────────────────────────────────
+let configs = {};
+let templates = [];
+
+// ── Init ────────────────────────────────────────
+async function init() {
+  try {
+    const r = await fetch('/api/configuracoes', { headers: H });
+    configs = await r.json();
+    carregarTudo();
+  } catch(e) {
+    toast('Erro ao carregar configurações', true);
+  }
+}
+
+function carregarTudo() {
+  // Templates de prospecção
+  templates = configs.mensagens_prospeccao?.templates || [''];
+  renderTemplates();
+
+  // Follow-up
+  const fu = configs.mensagens_followup || {};
+  setVal('followup_1', fu.followup_1 || '');
+  setVal('followup_2', fu.followup_2 || '');
+  setVal('followup_3', fu.followup_3 || '');
+
+  // Persona
+  const p = configs.persona_bot || {};
+  setVal('persona_nome', p.nome || 'Rafael');
+  setVal('persona_cargo', p.cargo || 'Estrategista de Marketing Digital');
+  setVal('persona_tom', p.tom || 'informal_profissional');
+  setVal('persona_objetivo', p.objetivo || '');
+  setVal('persona_instrucoes', p.instrucoes_extras || '');
+
+  // Limites
+  const l = configs.limites_envio || {};
+  setVal('lim_mensagens', l.mensagens_por_dia || 40);
+  setVal('lim_delay', Math.round((l.delay_entre_mensagens || 50000) / 1000));
+  setVal('lim_inicio', l.horario_inicio || '09:00');
+  setVal('lim_fim', l.horario_fim || '23:59');
+  setVal('lim_calendly', configs.persona_bot?.calendly || '');
+
+  // Dias
+  const dias = l.dias_semana || [1,2,3,4,5];
+  document.querySelectorAll('.day-btn').forEach(btn => {
+    const d = parseInt(btn.dataset.day);
+    btn.classList.toggle('active', dias.includes(d));
+  });
+}
+
+function renderTemplates() {
+  const c = document.getElementById('templates-container');
+  c.innerHTML = templates.map((t, i) => `
+    <div class="template-item" id="tmpl-${i}">
+      <div class="template-num">Variação ${i + 1}</div>
+      ${templates.length > 1 ? `<button class="btn-remove-tmpl" onclick="removerTemplate(${i})">✕ Remover</button>` : ''}
+      <textarea id="template-${i}" oninput="templates[${i}]=this.value">${t}</textarea>
+    </div>`).join('');
+}
+
+function adicionarTemplate() {
+  templates.push('');
+  renderTemplates();
+  document.getElementById(`template-${templates.length - 1}`).focus();
+}
+
+function removerTemplate(i) {
+  if (templates.length <= 1) return;
+  templates.splice(i, 1);
+  renderTemplates();
+}
+
+function previewMensagem() {
+  const tmpl = templates[0] || '';
+  const preview = tmpl
+    .replace(/{empresa}/g, 'Clínica Dental Center')
+    .replace(/{segmento}/g, 'dentista')
+    .replace(/{problema}/g, 'o site não está adaptado para celular')
+    .replace(/{cidade}/g, 'São Paulo')
+    .replace(/{score}/g, '42')
+    .replace(/{calendly}/g, 'https://calendly.com/sua-agencia/diagnostico')
+    .replace(/\*(.*?)\*/g, '$1');
+
+  document.getElementById('preview-text').textContent = preview;
+  document.getElementById('preview-prospeccao').style.display = 'block';
+}
+
+// ── Salvar ──────────────────────────────────────
+async function salvar(chave) {
+  let valor = {};
+
+  if (chave === 'mensagens_prospeccao') {
+    templates = templates.map((_, i) =>
+      document.getElementById(`template-${i}`)?.value || templates[i]);
+    valor = { templates };
+  }
+  else if (chave === 'mensagens_followup') {
+    valor = {
+      followup_1: getVal('followup_1'),
+      followup_2: getVal('followup_2'),
+      followup_3: getVal('followup_3'),
+    };
+  }
+  else if (chave === 'persona_bot') {
+    valor = {
+      nome: getVal('persona_nome'),
+      cargo: getVal('persona_cargo'),
+      tom: getVal('persona_tom'),
+      objetivo: getVal('persona_objetivo'),
+      instrucoes_extras: getVal('persona_instrucoes'),
+    };
+  }
+
+  await enviarConfig(chave, valor);
+}
+
+async function salvarLimites() {
+  const dias = [];
+  document.querySelectorAll('.day-btn.active').forEach(b => dias.push(parseInt(b.dataset.day)));
+
+  await enviarConfig('limites_envio', {
+    mensagens_por_dia: parseInt(getVal('lim_mensagens')) || 40,
+    delay_entre_mensagens: (parseInt(getVal('lim_delay')) || 50) * 1000,
+    horario_inicio: getVal('lim_inicio'),
+    horario_fim: getVal('lim_fim'),
+    dias_semana: dias,
+  });
+}
+
+async function salvarCalendly() {
+  const persona = configs.persona_bot || {};
+  persona.calendly = getVal('lim_calendly');
+  await enviarConfig('persona_bot', persona);
+}
+
+async function enviarConfig(chave, valor) {
+  try {
+    const r = await fetch('/api/configuracoes', {
+      method: 'POST',
+      headers: H,
+      body: JSON.stringify({ id: chave, valor })
+    });
+    if (r.ok) {
+      configs[chave] = valor;
+      toast(`✅ ${chave.replace(/_/g,' ')} salvo!`);
+    } else {
+      toast('Erro ao salvar', true);
+    }
+  } catch {
+    toast('Erro de conexão', true);
+  }
+}
+
+// ── UI Helpers ──────────────────────────────────
+function setTab(id) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const ids = ['prospeccao','followup','persona','limites'];
+    t.classList.toggle('active', ids[i] === id);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`panel-${id}`).classList.add('active');
+}
+
+function toggleDay(btn) { btn.classList.toggle('active'); }
+function toggleBtn(btn) { btn.classList.toggle('on'); }
+function getVal(id) { return document.getElementById(id)?.value || ''; }
+function setVal(id, v) { const el = document.getElementById(id); if(el) el.value = v; }
+
+function toast(msg, erro = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (erro ? ' error' : '');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,235 +1,135 @@
 import { createClient } from '@supabase/supabase-js';
 import { logger } from '../utils/logger.js';
 
-const sb = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
+const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 export const db = {
 
-  // =============================
-  // SALVAR LEAD
-  // =============================
-  async salvarLead(empresa) {
-    try {
-      const payload = {
-        nome_empresa: empresa.nome_empresa,
-        whatsapp: empresa.whatsapp || null,
-        site: empresa.site || null,
-        cidade: empresa.cidade || null,
-        segmento: empresa.segmento || null,
-        status: 'novo',
-        created_at: new Date().toISOString()
-      };
-
-      const { data, error } = await sb
-        .from('leads')
-        .upsert(payload, { onConflict: 'whatsapp', ignoreDuplicates: false })
-        .select()
-        .single();
-
-      if (error) {
-        logger.error(`❌ Erro salvarLead: ${error.message}`);
-        return null;
-      }
-
-      return data;
-    } catch (err) {
-      logger.error(`❌ salvarLead exception: ${err.message}`);
-      return null;
-    }
+  async salvarLead(d) {
+    const { data, error } = await sb.from('leads')
+      .upsert({
+        nome_empresa: d.nome_empresa, site: d.site || null,
+        telefone: d.telefone || null, whatsapp: d.whatsapp || null,
+        endereco: d.endereco || null, cidade: d.cidade || null,
+        segmento: d.segmento || null, avaliacoes: d.avaliacoes || null,
+        status: 'novo'
+      }, { onConflict: 'whatsapp' }).select().single();
+    if (error) logger.error(`DB salvarLead: ${error.message}`);
+    return data;
   },
 
+async salvarDiag(leadId, d) {
+  // Campos permitidos na tabela diagnosticos
+  const campos = {
+    lead_id: leadId,
+    score: d.score,
+    problemas: d.problemas,
+    resumo_ia: d.resumo_ia,
+    site_antigo: d.site_antigo,
+    tem_whatsapp: d.tem_whatsapp,
+    tem_formulario: d.tem_formulario,
+    mobile_ok: d.mobile_ok,
+    seo_basico: d.seo_basico,
+    velocidade: d.velocidade,
+    whatsapp_encontrado: d.whatsapp_encontrado,
+  };
+  // Remover campos undefined/null para evitar erros no Supabase
+  Object.keys(campos).forEach(k => (campos[k] === undefined || campos[k] === null) && k !== "lead_id" && k !== "score" && delete campos[k]);
+  const { data, error } = await sb.from('diagnosticos')
+    .insert(campos).select().single();
+  if (error) logger.error(`DB salvarDiag erro: ${error.message}`);
+  return data;
+},
 
-  // =============================
-  // BUSCAR LEAD PELO WHATSAPP
-  // =============================
-  async buscarLeadPorWhatsApp(numero) {
-    try {
-      const { data, error } = await sb
-        .from('leads')
-        .select(`
-          *,
-          diagnosticos(*),
-          conversas(direcao, mensagem, created_at)
-        `)
-        .eq('whatsapp', numero)
-        .single();
-
-      if (error) return null;
-      return data;
-    } catch {
-      return null;
-    }
+  async update(id, campos) {
+    await sb.from('leads')
+      .update({ ...campos, updated_at: new Date() })
+      .eq('id', id);
   },
 
-
-  // =============================
-  // SALVAR DIAGNÓSTICO
-  // =============================
-  async salvarDiagnostico(leadId, diagnostico) {
-    try {
-      if (!diagnostico) return null;
-
-      const payload = {
-        lead_id: leadId,
-        score: diagnostico.score || 0,
-        problemas: diagnostico.problemas || [],
-        created_at: new Date().toISOString()
-      };
-
-      const { data, error } = await sb
-        .from('diagnosticos')
-        .insert(payload)
-        .select()
-        .single();
-
-      if (error) {
-        logger.error(`❌ Erro salvarDiagnostico: ${error.message}`);
-        return null;
-      }
-
-      return data;
-    } catch (err) {
-      logger.error(`❌ salvarDiagnostico exception: ${err.message}`);
-      return null;
-    }
+  async msg(leadId, dir, texto) {
+    await sb.from('conversas').insert({
+      lead_id: leadId, direcao: dir, mensagem: texto
+    });
   },
 
-
-  // =============================
-  // ATUALIZAR STATUS
-  // =============================
-  async atualizarStatus(leadId, status, dados = {}) {
-    try {
-      const payload = {
-        status,
-        ...dados,
-        updated_at: new Date().toISOString()
-      };
-
-      const { error } = await sb
-        .from('leads')
-        .update(payload)
-        .eq('id', leadId);
-
-      if (error) {
-        logger.error(`❌ atualizarStatus: ${error.message}`);
-        return false;
-      }
-
-      return true;
-    } catch (err) {
-      logger.error(`❌ atualizarStatus exception: ${err.message}`);
-      return false;
-    }
+  // Busca lead com histórico COMPLETO e diagnóstico — usado no webhook
+  async porWhatsAppCompleto(numero) {
+    const { data } = await sb.from('leads')
+      .select(`
+        *,
+        diagnosticos ( score, problemas, resumo_ia, site_antigo, tem_whatsapp, mobile_ok ),
+        conversas ( id, direcao, mensagem, created_at )
+      `)
+      .eq('whatsapp', numero)
+      .order('created_at', { referencedTable: 'conversas', ascending: true })
+      .single();
+    return data;
   },
 
-
-  // =============================
-  // REGISTRAR CONVERSA
-  // =============================
-  async registrarConversa(leadId, direcao, mensagem) {
-    try {
-      const payload = {
-        lead_id: leadId,
-        direcao,
-        mensagem,
-        created_at: new Date().toISOString()
-      };
-
-      const { error } = await sb
-        .from('conversas')
-        .insert(payload);
-
-      if (error) {
-        logger.error(`❌ registrarConversa: ${error.message}`);
-        return false;
-      }
-
-      return true;
-    } catch {
-      return false;
-    }
-  },
-
-
-  // =============================
-  // LEADS PENDENTES
-  // =============================
-  async pendentes(lim = 40) {
-    try {
-      const { data } = await sb
-        .from('leads')
-        .select('*')
-        .eq('status', 'novo')
-        .not('whatsapp', 'is', null)
-        .limit(lim);
-
-      return data || [];
-    } catch {
-      return [];
-    }
-  },
-
-
-  // =============================
-  // LISTAR
-  // =============================
   async listar(pag = 0) {
-    try {
-      const { data, count } = await sb
-        .from('leads')
-        .select('*, diagnosticos(score, problemas)', { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range(pag * 50, pag * 50 + 49);
-
-      return {
-        leads: data || [],
-        total: count || 0
-      };
-    } catch {
-      return { leads: [], total: 0 };
-    }
+    // Busca total para paginao
+    const { count } = await sb.from('leads').select('*', { count: 'exact', head: true });
+    // Busca diagnsticos ordenados por score desc para priorizar leads com score
+    const { data: todasDiags } = await sb.from('diagnosticos')
+      .select('lead_id, score, problemas')
+      .order('score', { ascending: false });
+    const diagMap = {};
+    (todasDiags || []).forEach(d => { diagMap[d.lead_id] = d; });
+    // Busca leads desta pgina ordenados por created_at
+    const { data } = await sb.from('leads')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(pag * 50, pag * 50 + 49);
+    const leads = data || [];
+    // Mescla diagnostico em cada lead
+    const leadsComDiag = leads.map(l => ({
+      ...l,
+      diagnosticos: diagMap[l.id] ? [diagMap[l.id]] : []
+    }));
+    return { leads: leadsComDiag, total: count || 0 };
   },
 
+  async pendentes(lim = 40) {
+    const { data } = await sb.from('leads').select('*')
+      .eq('status', 'novo').not('whatsapp', 'is', null).limit(lim);
+    return data || [];
+  },
 
-  // =============================
-  // MÉTRICAS
-  // =============================
+  // Leads contatados há mais de 48h sem resposta — para follow-up
+  async buscarParaFollowUp() {
+    const limite = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const { data } = await sb.from('leads')
+      .select('*')
+      .eq('status', 'contatado')
+      .not('whatsapp', 'is', null)
+      .lt('data_contato', limite)
+      .limit(20);
+    return data || [];
+  },
+
   async metricas() {
-    try {
-      const hoje = new Date().toISOString().split('T')[0];
+    const hoje = new Date().toISOString().split('T')[0];
 
-      const q = () =>
-        sb.from('leads').select('*', { count: 'exact', head: true });
+    const results = await Promise.all([
+      sb.from('leads').select('*', { count: 'exact', head: true }),
+      sb.from('leads').select('*', { count: 'exact', head: true }).gte('data_contato', hoje),
+      sb.from('leads').select('*', { count: 'exact', head: true }).gte('data_resposta', hoje),
+      sb.from('leads').select('*', { count: 'exact', head: true }).eq('reuniao_agendada', true),
+      sb.from('leads').select('*', { count: 'exact', head: true }).eq('interesse', 'quente'),
+      sb.from('leads').select('*', { count: 'exact', head: true }).eq('status', 'link_enviado'),
+    ]);
 
-      const [a, b, c, d] = await Promise.all([
-        q().then(r => r.count || 0),
-        q().gte('data_contato', hoje).then(r => r.count || 0),
-        q().gte('data_resposta', hoje).then(r => r.count || 0),
-        q().eq('reuniao_agendada', true).then(r => r.count || 0)
-      ]);
+    const [total, envHoje, respHoje, reunioes, quentes, linksEnviados] = results.map(r => r.count || 0);
 
-      return {
-        total_leads: a,
-        enviados_hoje: b,
-        responderam_hoje: c,
-        reunioes_hoje: d,
-        taxa_resposta: b > 0
-          ? ((c / b) * 100).toFixed(1) + '%'
-          : '0%'
-      };
-    } catch {
-      return {
-        total_leads: 0,
-        enviados_hoje: 0,
-        responderam_hoje: 0,
-        reunioes_hoje: 0,
-        taxa_resposta: '0%'
-      };
-    }
+    return {
+      total_leads: total,
+      enviados_hoje: envHoje,
+      responderam_hoje: respHoje,
+      reunioes_agendadas: reunioes,
+      leads_quentes: quentes,
+      links_enviados: linksEnviados,
+      taxa_resposta: envHoje > 0 ? ((respHoje / envHoje) * 100).toFixed(1) + '%' : '0%'
+    };
   }
-
 };

@@ -14,7 +14,6 @@ export class Orchestrator {
     this.ativo    = false;
     this.stats    = { processados: 0, enviados: 0, erros: 0 };
     this._enviandoPara = new Set();
-    this._respondendoPara = new Set(); // [FIX] Lock por numero para evitar respostas duplas
   }
 
   // ─────────────────────────────────────────────
@@ -60,7 +59,7 @@ export class Orchestrator {
 
     try {
       await this.scraper.init();
-      const empresas = await this.scraper.buscarEmpresas({ segmento, cidade, limite });
+      const empresas = await this.scraper.buscarEmpresas(segmento, cidade, limite);
       await this.scraper.fechar();
 
       for (const emp of empresas) {
@@ -136,20 +135,6 @@ export class Orchestrator {
   //  PROCESSAR RESPOSTA — envio em partes
   // ─────────────────────────────────────────────
   async processarResposta(numero, texto) {
-    // [FIX DUPLICATA] Evita processar a mesma conversa em paralelo
-    if (this._respondendoPara.has(numero)) {
-      logger.warn(`⚠️ Ja respondendo ${numero}, ignorando chamada paralela`);
-      return;
-    }
-    this._respondendoPara.add(numero);
-    try {
-      await this._processarRespostaInterno(numero, texto);
-    } finally {
-      this._respondendoPara.delete(numero);
-    }
-  }
-
-  async _processarRespostaInterno(numero, texto) {
     logger.info(`\n${'─'.repeat(50)}`);
     logger.info(`📩 RESPOSTA de ${numero}`);
     logger.info(`   "${texto.substring(0, 80)}${texto.length > 80 ? '...' : ''}"`);

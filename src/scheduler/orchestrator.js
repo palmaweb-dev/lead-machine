@@ -26,7 +26,7 @@ export class Orchestrator {
     try {
       // 1. Prospecção
       await this.scraper.init();
-      const empresas = await this.scraper.buscarEmpresas(segmento, cidade, limite);
+      const empresas = await this.scraper.buscarEmpresas({ segmento, cidade, limite });
       await this.scraper.fechar();
       
       logger.info(`📋 ${empresas.length} empresas encontradas`);

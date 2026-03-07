@@ -1,0 +1,346 @@
+import { OpenAI } from 'openai';
+import { createClient } from '@supabase/supabase-js';
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Cliente Supabase local para carregar configuracoes do dashboard
+const sbLocal = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+// [FIX] Carrega persona_bot e calendly_link do banco (dashboard)
+// Substitui valores hardcoded por configuracoes dinamicas
+async function carregarConfigs() {
+  try {
+    const { data } = await sbLocal.from('configuracoes')
+      .select('id, valor')
+      .in('id', ['persona_bot', 'calendly_link']);
+    const map = {};
+    (data || []).forEach(r => { map[r.id] = r.valor; });
+    return {
+      persona: map['persona_bot'] || {},
+      calendly: map['calendly_link']?.url || process.env.CALENDLY_LINK || ''
+    };
+  } catch {
+    return { persona: {}, calendly: process.env.CALENDLY_LINK || '' };
+  }
+}
+
+const PADROES_BOT = [
+  /obrigad[ao] por entrar em contato/i,
+  /estou aqui para ajudar/i,
+  /responderei o mais breve possível/i,
+  /atendimento automático/i,
+  /horário de atendimento/i,
+  /fora do horário/i,
+  /digite \d para/i,
+  /selecione uma opção/i,
+  /sua mensagem foi recebida/i,
+  /aguarde.*atendente/i,
+  /em breve retornaremos/i,
+  /bot|chatbot|assistente virtual/i,
+  /para falar com.*humano/i,
+  /menu principal/i,
+  /olá!.*obrigad/i,
+];
+
+function detectarEstagio(conversas, ultimaMensagem) {
+  const totalRespostas = conversas.filter(m => m.direcao === 'recebido').length;
+  const textoCompleto = conversas.map(m => m.mensagem).join(' ').toLowerCase();
+  const ultima = ultimaMensagem.toLowerCase();
+
+  const sinaisQuentes = [
+    /quanto custa|qual o valor|qual o preço/i,
+    /como funciona|me conta mais|me fala mais/i,
+    /tenho interesse|pode me mandar|quero saber/i,
+    /que horas|qual horário|quando podemos/i,
+    /vamos marcar|pode ser|topo|bora/i,
+    /me manda o link|como agendo|como marco/i,
+  ];
+
+  const objecoes = {
+    sem_tempo:     /sem tempo|muito ocupad|agora não|depois|mais tarde|semana que vem/i,
+    ja_tem:        /já ten(ho|ho)|já trabalho com|já tem alguém|já temos agência/i,
+    sem_dinheiro:  /sem verba|sem orçamento|sem budget|não tenho dinheiro|caro|investimento/i,
+    nao_precisa:   /não preciso|não precis|não vejo necessidade|tá bom assim/i,
+    desconfianca:  /como você achou|quem é você|de onde|spam|golpe/i,
+    pensando:      /vou pensar|deixa eu pensar|preciso avaliar|vou ver/i,
+    nao_interessa: /não tenho interesse|não me interessa|não quero|pode parar/i,
+  };
+
+  const isQuente = sinaisQuentes.some(p => p.test(ultima));
+  let objecaoDetectada = null;
+  for (const [tipo, padrao] of Object.entries(objecoes)) {
+    if (padrao.test(ultima)) { objecaoDetectada = tipo; break; }
+  }
+
+  return {
+    totalRespostas, isQuente, objecaoDetectada,
+    isBot: PADROES_BOT.some(p => p.test(ultimaMensagem)),
+    historicoPositivo: textoCompleto.includes('interesse') || textoCompleto.includes('sim') || textoCompleto.includes('pode'),
+    jaOfertouLink: textoCompleto.includes(process.env.CALENDLY_LINK || 'calendly'),
+  };
+}
+
+function buildSystemPrompt(lead, diagnostico, estagio, contexto) {
+  const calendly = process.env.CALENDLY_LINK;
+  const problemas = diagnostico?.problemas?.join(', ') || 'presenca digital fraca';
+  const score     = diagnostico?.score ?? 'N/A';
+
+  return `Voce e um especialista em marketing digital e atendimento comercial da Palmaweb Agencia Digital.
+
+Seu papel e conversar com empresarios, entender o cenario digital deles e ajuda-los a identificar oportunidades de melhorar sua presenca online e gerar mais clientes.
+
+A Palmaweb possui mais de 15 anos de experiencia em marketing digital, desenvolvimento de sites e estrategias de posicionamento online.
+
+OBJETIVO DA CONVERSA:
+Ajudar o cliente a perceber oportunidades no digital e conduzir naturalmente a conversa para um diagnostico ou reuniao estrategica.
+
+ESTILO:
+- Profissional, consultivo, educativo e focado em gerar valor.
+- Parece um atendente humano digitando no WhatsApp.
+- Evite respostas roboticas ou muito formais.
+
+FORMATO DAS MENSAGENS  CRITICO:
+- NUNCA envie textos longos.
+- Divida SEMPRE em no maximo 2 ou 3 mensagens.
+- Cada mensagem = apenas 1 frase curta.
+- Cada mensagem tem no maximo 120 caracteres.
+- Use [PAUSA] para separar cada mensagem.
+- NUNCA use bullet points, listas ou negrito.
+- NUNCA faca mais de 1 pergunta por resposta.
+
+ESTRUTURA IDEAL:
+Mensagem 1 -> reconhecimento ou resposta direta
+[PAUSA]
+Mensagem 2 -> explicacao breve ou valor estrategico
+[PAUSA]
+Mensagem 3 -> pergunta para continuar a conversa
+
+EXEMPLO CORRETO:
+Cliente: "Voces fazem sites?"
+Resposta:
+"Sim, desenvolvemos sites profissionais."
+[PAUSA]
+"Eles ajudam sua empresa a transmitir mais autoridade online."
+[PAUSA]
+"Hoje voce ja possui um site ou depende mais de redes sociais?"
+
+DADOS DO LEAD:
+EMPRESA: ${lead.nome_empresa}
+SEGMENTO: ${lead.segmento || 'nao identificado'}
+PROBLEMAS NO SITE: ${problemas}
+SCORE DIGITAL: ${score}/100
+LINK AGENDAMENTO: ${calendly}
+
+ESTAGIO DA CONVERSA:
+- Respostas do lead: ${estagio.totalRespostas}
+- Interesse: ${estagio.isQuente ? 'QUENTE' : 'MORNO/FRIO'}
+- Objecao detectada: ${estagio.objecaoDetectada || 'nenhuma'}
+- Link ja enviado: ${estagio.jaOfertouLink ? 'SIM - nao enviar de novo' : 'NAO'}
+${contexto}
+
+OBJETIVO FINAL:
+Agendar uma Sessao Estrategica gratuita de 30 minutos.
+So oferea o link apos 2 trocas positivas OU sinal claro de interesse.
+
+COMO REBATER OBJECOES (sempre com [PAUSA] entre as partes):
+"Vou pensar" -> "Claro, sem pressa!" [PAUSA] "So por curiosidade, o que te deixaria mais confortavel?"
+"Ja tenho agencia" -> "Faz sentido ter alguem!" [PAUSA] "Voce tem acompanhado os resultados concretos?"
+"Sem orcamento" -> "A sessao e gratuita, sem proposta." [PAUSA] "E so eu te mostrar o que encontrei."
+"Sem tempo" -> "Sao so 30 minutos, voce escolhe o dia." [PAUSA] "Posso te mandar o link pra marcar?"
+"Como achou meu numero?" -> "Encontrei pesquisando empresas do segmento." [PAUSA] "Nada invasivo, se preferir sem contato e so falar."
+
+${estagio.isBot ? `BOT ADVERSARIO DETECTADO  responda: "Voce poderia me conectar com o responsavel pelo marketing?" [PAUSA] "Tenho algo especifico sobre o site de voces."` : ''}
+
+REGRAS ABSOLUTAS:
+- SEMPRE use [PAUSA] para separar as mensagens
+- NUNCA escreva mais de 1 frase sem um [PAUSA]
+- NUNCA envie o link se ja foi enviado
+- NUNCA seja generico  mencione a empresa ou segmento
+- NUNCA faca mais de 1 pergunta por mensagem`;
+}
+
+// ══════════════════════════════════════════════
+//  DIVIDIR RESPOSTA EM PARTES HUMANAS
+// ══════════════════════════════════════════════
+function dividirEmPartes(texto) {
+  // Dividir pelo marcador [PAUSA]
+  let partes = texto.split(/\[PAUSA\]/gi)
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
+
+  // Se não tiver [PAUSA], dividir por parágrafos duplos
+  if (partes.length === 1) {
+    partes = texto.split(/\n\n+/)
+      .map(p => p.trim())
+      .filter(p => p.length > 0);
+  }
+
+  // Limitar a 4 partes no máximo
+  return partes.slice(0, 3); // maximo 3 mensagens por resposta
+}
+
+export class MessageBuilder {
+
+  async construirInicial(lead, diag) {
+    const empresa = lead.nome_empresa;
+    const segmento = lead.segmento || 'sua área';
+    const problema = diag?.problemas?.[0] || '';
+
+    const mapeamento = [
+      { gatilho: 'celular',       obs: 'o site não está adaptado para celular — onde a maioria dos clientes pesquisa hoje' },
+      { gatilho: 'WhatsApp',      obs: 'não tem botão de WhatsApp visível, o que dificulta o contato na hora certa' },
+      { gatilho: 'desatualizado', obs: 'o design do site pode estar passando uma imagem desatualizada do negócio' },
+      { gatilho: 'HTTPS',         obs: 'o site não tem certificado de segurança, o que afasta visitantes e prejudica no Google' },
+      { gatilho: 'lento',         obs: 'o site demora pra carregar — acima de 3 segundos a maioria dos visitantes abandona' },
+      { gatilho: 'SEO',           obs: 'encontrei problemas de SEO que estão reduzindo a visibilidade no Google' },
+      { gatilho: 'formulário',    obs: 'não há uma forma clara de capturar o contato de quem visita o site' },
+    ];
+
+    let observacao = 'a presença digital pode estar limitando a geração de clientes';
+    for (const { gatilho, obs } of mapeamento) {
+      if (problema.toLowerCase().includes(gatilho.toLowerCase())) {
+        observacao = obs; break;
+      }
+    }
+
+    const templatesDefault = [
+      `Oi! Pesquisando empresas do segmento de ${segmento}, acabei chegando no site da *${empresa}*.\n\nNotei que ${observacao} — isso pode estar custando clientes sem que você perceba.\n\nFaço diagnósticos gratuitos pra esse tipo de situação. Posso te mostrar o que encontrei?`,
+      `Olá! Vi o site da *${empresa}* enquanto fazia uma análise de empresas da região.\n\nNotei que ${observacao} — esse é um ponto que pode impactar diretamente na geração de clientes.\n\nPosso te apresentar um diagnóstico em uma Sessão Estratégica *gratuita*?`,
+      `Oi! Estava analisando a presença digital de algumas empresas e o site da *${empresa}* apareceu pra mim.\n\nNotei que ${observacao}.\n\nPosso te mostrar o que encontrei? É gratuito e sem compromisso.`,
+    ];
+
+    let templates = templatesDefault;
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const sbLocal = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+      const { data } = await sbLocal.from('configuracoes').select('valor').eq('id', 'mensagens_prospeccao').single();
+      if (data?.valor?.templates?.length > 0) {
+        const calendly = process.env.CALENDLY_LINK || '';
+        templates = data.valor.templates.map(t =>
+          t.replace(/\{empresa\}/g, empresa)
+           .replace(/\{problema\}/g, problema || observacao)
+           .replace(/\{segmento\}/g, segmento)
+           .replace(/\{cidade\}/g, lead.cidade || '')
+           .replace(/\{score\}/g, diag?.score ?? '')
+           .replace(/\{calendly\}/g, calendly)
+        );
+      }
+    } catch { /* usa templates padrão */ }
+
+    return templates[Math.floor(Math.random() * templates.length)];
+  }
+
+  detectarBot(mensagem) {
+    return PADROES_BOT.some(p => p.test(mensagem));
+  }
+
+  async classificarInteresse(mensagem) {
+    if (!process.env.OPENAI_API_KEY) return 'morno';
+    try {
+      const r = await openai.chat.completions.create({
+        model: 'gpt-4o-mini', max_tokens: 5, temperature: 0,
+        messages: [{ role: 'user', content:
+          `Classifique: quente (quer avançar/perguntou como funciona/topou reunião), morno (respondeu mas neutro), frio (desinteressado/pediu pra parar).\nMensagem: "${mensagem}"\nUma palavra apenas.`
+        }]
+      });
+      const t = r.choices[0].message.content.toLowerCase();
+      return t.includes('quente') ? 'quente' : t.includes('frio') ? 'frio' : 'morno';
+    } catch { return 'morno'; }
+  }
+
+  // Gera resposta e retorna ARRAY de partes para envio sequencial
+  async gerarRespostaEmPartes(conversas, novaMensagem, lead, diagnostico) {
+    const estagio = detectarEstagio(conversas || [], novaMensagem);
+    const totalEnviados = (conversas || []).filter(m => m.direcao === 'enviado').length;
+
+    const contexto = `
+INSTRUÇÃO DE TIMING:
+${estagio.isQuente && !estagio.jaOfertouLink
+  ? '→ MOMENTO CERTO para oferecer agendamento. Use [PAUSA] entre as partes.'
+  : estagio.jaOfertouLink
+  ? '→ Link JÁ ENVIADO. Não envie de novo. Pergunte se teve chance de ver.'
+  : estagio.totalRespostas >= 2 && estagio.historicoPositivo
+  ? '→ Conversa positiva. Comece a conduzir ao agendamento com [PAUSA].'
+  : '→ Continue construindo rapport. Use [PAUSA] para dividir a resposta.'}
+${estagio.objecaoDetectada ? `\nOBJEÇÃO: "${estagio.objecaoDetectada}" — use a técnica correspondente com [PAUSA].` : ''}
+MENSAGENS ENVIADAS: ${totalEnviados}`;
+
+    const historico = (conversas || []).map(m => ({
+      role: m.direcao === 'enviado' ? 'assistant' : 'user',
+      content: m.mensagem
+    }));
+
+    try {
+      const r = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        max_tokens: 400,
+        temperature: 0.85,
+        messages: [
+          { role: 'system', content: buildSystemPrompt(lead, diagnostico, estagio, contexto) },
+          ...historico,
+          { role: 'user', content: novaMensagem }
+        ]
+      });
+
+      const textoCompleto = r.choices[0].message.content.trim();
+      return { partes: dividirEmPartes(textoCompleto), estagio };
+
+    } catch {
+      return { partes: [this.respostaFallback(estagio)], estagio };
+    }
+  }
+
+  // Mantido para compatibilidade
+  async gerarResposta(conversas, novaMensagem, lead, diagnostico) {
+    const { partes } = await this.gerarRespostaEmPartes(conversas, novaMensagem, lead, diagnostico);
+    return partes.join('\n\n');
+  }
+
+  respostaFallback(estagio) {
+    const calendly = process.env.CALENDLY_LINK;
+    if (estagio.isQuente && !estagio.jaOfertouLink) {
+      return `Que bom!\n\nVou te mandar o link pra escolher o melhor horário — 30 min, sem compromisso:\n\n${calendly}`;
+    }
+    if (estagio.objecaoDetectada === 'sem_tempo') {
+      return `Sem problema!\n\nQuando tiver um tempinho, é só me dar um sinal. Você escolhe o horário.`;
+    }
+    return `Faz sentido!\n\nPosso te mostrar numa conversa rápida de 30 minutos — totalmente gratuita. Teria um tempinho essa semana?`;
+  }
+
+  async gerarFollowUp(lead, conversas, diagnostico, tentativa = 1) {
+    const empresa = lead.nome_empresa;
+    const problema = diagnostico?.problemas?.[0] || 'presença digital';
+    const calendly = process.env.CALENDLY_LINK;
+
+    const followUps = {
+      1: `Oi! Sei que o dia a dia é corrido.\n\nSó passando pra ver se você teve chance de ver minha mensagem sobre o site da *${empresa}*. Sem pressão!`,
+      2: `Oi! Fiz a análise completa do site da *${empresa}* e encontrei ${diagnostico?.problemas?.length || 'alguns'} pontos que podem estar reduzindo clientes.\n\nSe quiser ver, são 30 minutos e totalmente gratuito:\n${calendly}`,
+      3: `Última mensagem, prometo! 😄\n\nCaso um dia queira ver o diagnóstico da *${empresa}*, fico à disposição. Bom trabalho pra você!`,
+    };
+
+    if (process.env.OPENAI_API_KEY && tentativa <= 2) {
+      try {
+        const r = await openai.chat.completions.create({
+          model: 'gpt-4o-mini', max_tokens: 120, temperature: 0.8,
+          messages: [{ role: 'user', content:
+            `Follow-up de WhatsApp tentativa ${tentativa}/3 para ${empresa} (${lead.segmento || 'empresa'}).\nProblema: ${problema}. Link: ${calendly}.\nRegras: 2-3 linhas curtas, não invasivo, informal.\n${tentativa === 1 ? 'Verificar se viu a mensagem.' : 'Reforçar valor gratuito.'}\nUse quebras de linha naturais.`
+          }]
+        });
+        return r.choices[0].message.content.trim();
+      } catch { /* fallback */ }
+    }
+    return followUps[tentativa] || followUps[3];
+  }
+
+  ehMensagemDeStop(texto) {
+    return [
+      /não me (mande|envie|contate)/i,
+      /me (tire|remova) da lista/i,
+      /para de me (mandar|enviar)/i,
+      /não tenho interesse/i,
+      /stop|sair|descadastrar/i,
+      /não quero mais contato/i,
+      /pode parar/i,
+    ].some(p => p.test(texto));
+  }
+}

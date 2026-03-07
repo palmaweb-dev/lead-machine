@@ -15,8 +15,7 @@ const sb = createClient(
   process.env.SUPABASE_KEY
 );
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json());
 app.use(express.static(join(__dirname, 'public')));
 
 
@@ -102,19 +101,6 @@ app.post('/webhook/whatsapp', async (req, res) => {
     console.log(JSON.stringify(req.body, null, 2));
 
     const body = req.body;
-
-    // [FIX DUPLICATA] A Uaizap pode disparar o mesmo evento 2x
-    // Usa o messageid para detectar e bloquear duplicatas (janela de 30s)
-    const _msgId = body?.message?.messageid || body?.data?.messageid;
-    if (_msgId) {
-      if (global._uazapiMsgCache?.has(_msgId)) {
-        console.log('Duplicata ignorada:', _msgId);
-        return res.sendStatus(200);
-      }
-      if (!global._uazapiMsgCache) global._uazapiMsgCache = new Map();
-      global._uazapiMsgCache.set(_msgId, Date.now());
-      setTimeout(() => global._uazapiMsgCache?.delete(_msgId), 30000);
-    }
 
     if (!body) {
       return res.sendStatus(200);

@@ -14,47 +14,12 @@ export class Orchestrator {
     this.ativo    = false;
     this.stats    = { processados: 0, enviados: 0, erros: 0 };
     this._enviandoPara = new Set();
-    this._respondendoPara = new Set(); // [FIX] Lock por numero para evitar respostas duplas
   }
 
-  // ─────────────────────────────────────────────
-  //  ENVIO EM PARTES — comportamento humano
-  // ─────────────────────────────────────────────
-  async enviarEmPartes(numero, partes) {
-    const resultados = [];
-
-    for (let i = 0; i < partes.length; i++) {
-      const parte = partes[i];
-      if (!parte.trim()) continue;
-
-      // Delay entre partes (simula pessoa pensando e digitando)
-      if (i > 0) {
-        const pausaMs = 4000 + Math.random() * 6000; // 4-10s entre partes
-        logger.info(`  ⌨️  Parte ${i+1}/${partes.length} — aguardando ${(pausaMs/1000).toFixed(0)}s...`);
-        await new Promise(r => setTimeout(r, pausaMs));
-      }
-
-      const ok = await this.whatsapp.enviarMensagem(numero, parte);
-      resultados.push(ok);
-
-      if (!ok.sucesso) {
-        logger.error(`  ❌ Falha ao enviar parte ${i+1}`);
-        break;
-      }
-
-      logger.info(`  ✅ Parte ${i+1}/${partes.length} enviada`);
-    }
-
-    return resultados.every(r => r.sucesso);
-  }
-
-  // ─────────────────────────────────────────────
-  //  CICLO DE PROSPECÇÃO
-  // ─────────────────────────────────────────────
   async executarCiclo({ segmento, cidade, limite = 20 }) {
-    if (!this.horarioOk()) { logger.info('⏰ Fora do horário.'); return; }
+    if (!this.horarioOk()) { logger.info('⏰ Fora do horário permitido.'); return; }
 
-    logger.info(`\n${'═'.repeat(55)}\n🚀 PROSPECÇÃO: ${segmento} | ${cidade} | ${limite} leads\n${'═'.repeat(55)}`);
+    logger.info(`\n${'═'.repeat(55)}\n🚀 PROSPECÇÃO: ${segmento} | ${cidade} | limite: ${limite}\n${'═'.repeat(55)}`);
     this.ativo = true;
     this.stats = { processados: 0, enviados: 0, erros: 0 };
 
@@ -65,15 +30,16 @@ export class Orchestrator {
 
       for (const emp of empresas) {
         if (!this.ativo) break;
-        emp.segmento = segmento; emp.cidade = cidade;
+        emp.segmento = segmento;
+        emp.cidade = cidade;
         await this.processarEmpresa(emp);
         this.stats.processados++;
         const espera = this.delay();
-        logger.info(`⏳ ${(espera/1000).toFixed(0)}s até próxima...\n`);
+        logger.info(`⏳ ${(espera / 1000).toFixed(0)}s até próxima...\n`);
         await new Promise(r => setTimeout(r, espera));
       }
     } catch (e) {
-      logger.error(`Erro: ${e.message}`);
+      logger.error(`Erro crítico: ${e.message}`);
     } finally {
       this.ativo = false;
       logger.info(`\n📊 Processados: ${this.stats.processados} | Enviados: ${this.stats.enviados} | Erros: ${this.stats.erros}`);
@@ -85,8 +51,9 @@ export class Orchestrator {
     const lead = await db.salvarLead(emp);
     if (!lead) { this.stats.erros++; return; }
 
+    // ANTI-DUPLICATA: verificar status
     if (lead.status !== 'novo') {
-      logger.info(`  ⏭️  Já contatado (${lead.status})`);
+      logger.info(`  ⏭️  Já contatado (${lead.status}) — pulando`);
       return;
     }
 
@@ -104,12 +71,14 @@ export class Orchestrator {
     }
 
     if (!lead.whatsapp) {
+      logger.warn(`  ⚠️  Sem WhatsApp`);
       await db.update(lead.id, { status: 'sem_contato' });
       return;
     }
 
+    // ANTI-DUPLICATA: lock por número
     if (this._enviandoPara.has(lead.whatsapp)) {
-      logger.warn(`  🔒 Duplicata bloqueada`);
+      logger.warn(`  🔒 Duplicata bloqueada: ${lead.whatsapp}`);
       return;
     }
     this._enviandoPara.add(lead.whatsapp);
@@ -125,53 +94,55 @@ export class Orchestrator {
         await db.update(lead.id, { status: 'contatado', data_contato: new Date() });
         await db.msg(lead.id, 'enviado', msg);
         this.stats.enviados++;
-        logger.info(`  ✅ Enviado!`);
+        logger.info(`  ✅ Mensagem enviada!`);
       } else { this.stats.erros++; }
     } finally {
       setTimeout(() => this._enviandoPara.delete(lead.whatsapp), 60000);
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  PROCESSAR RESPOSTA — envio em partes
-  // ─────────────────────────────────────────────
-  async processarResposta(numero, texto) {
-    // [FIX DUPLICATA] Evita processar a mesma conversa em paralelo
-    if (this._respondendoPara.has(numero)) {
-      logger.warn(`⚠️ Ja respondendo ${numero}, ignorando chamada paralela`);
-      return;
-    }
-    this._respondendoPara.add(numero);
-    try {
-      await this._processarRespostaInterno(numero, texto);
-    } finally {
-      this._respondendoPara.delete(numero);
-    }
-  }
-
-  async _processarRespostaInterno(numero, texto) {
+  async processarResposta(numero, texto, timestamp = null) {
     logger.info(`\n${'─'.repeat(50)}`);
-    logger.info(`📩 RESPOSTA de ${numero}`);
-    logger.info(`   "${texto.substring(0, 80)}${texto.length > 80 ? '...' : ''}"`);
+    logger.info(`📩 RESPOSTA de ${numero}: "${texto.substring(0, 80)}..."`);
 
     const lead = await db.porWhatsAppCompleto(numero);
     if (!lead) { logger.warn(`  ⚠️  Número não está na base`); return; }
 
     logger.info(`  🏢 ${lead.nome_empresa} | Status: ${lead.status}`);
 
+    // PROTEO: cooldown de 2 minutos entre respostas ao mesmo lead
+    if (lead.data_resposta) {
+      const agora = Date.now();
+      const ultimaResposta = new Date(lead.data_resposta).getTime();
+      const diffMinutos = (agora - ultimaResposta) / 1000 / 60;
+      if (diffMinutos < 2) {
+        logger.warn(` Cooldown ativo para ${lead.nome_empresa} (${diffMinutos.toFixed(1)}min atrs)  ignorando`);
+        return;
+      }
+    }
+
+    // PROTEO: ignorar mensagens anteriores ao contato inicial do bot
+    if (lead.data_contato && timestamp) {
+      const msgTime = new Date(timestamp).getTime();
+      const contatoTime = new Date(lead.data_contato).getTime();
+      if (msgTime < contatoTime - 5000) {
+        logger.warn(` Mensagem anterior ao contato inicial  ignorando`);
+        return;
+      }
+    }
+
+
+    // Mensagem de stop
     if (this.builder.ehMensagemDeStop(texto)) {
       logger.info(`  🚫 Lead pediu para parar`);
       await db.update(lead.id, { status: 'descartado' });
       await db.msg(lead.id, 'recebido', texto);
-      await this.whatsapp.enviarMensagem(numero, `Entendido! Não entrarei mais em contato. Boa sorte! 👊`);
+      await this.whatsapp.enviarMensagem(numero, `Entendido! Não vou mais entrar em contato. Boa sorte com o negócio! 👊`);
       return;
     }
 
     const ehBot = this.builder.detectarBot(texto);
-    if (ehBot) {
-      logger.info(`  🤖 Bot adversário detectado`);
-      await db.update(lead.id, { status: 'bot_detectado' });
-    }
+    if (ehBot) { logger.info(`  🤖 Bot adversário detectado`); await db.update(lead.id, { status: 'bot_detectado' }); }
 
     await db.msg(lead.id, 'recebido', texto);
     await db.update(lead.id, { status: 'respondeu', data_resposta: new Date() });
@@ -180,32 +151,20 @@ export class Orchestrator {
     await db.update(lead.id, { interesse });
     logger.info(`  🌡️  Interesse: ${interesse.toUpperCase()}`);
 
-    // Delay inicial — simula pessoa vendo e pensando antes de começar a digitar
-    const delayInicial = ehBot
-      ? 3000 + Math.random() * 2000
-      : 15000 + Math.random() * 35000; // 15-50s para parecer humano
+    const delayMs = ehBot ? 3000 + Math.random() * 2000 : 10000 + Math.random() * 20000;
+    logger.info(`  ⏳ Respondendo em ${(delayMs / 1000).toFixed(0)}s...`);
+    await new Promise(r => setTimeout(r, delayMs));
 
-    logger.info(`  ⏳ Iniciando resposta em ${(delayInicial/1000).toFixed(0)}s...`);
-    await new Promise(r => setTimeout(r, delayInicial));
-
-    // Gerar resposta em partes
     const diagnostico = lead.diagnosticos?.[0] || null;
     const historico   = lead.conversas || [];
 
-    const { partes, estagio } = await this.builder.gerarRespostaEmPartes(
-      historico, texto, lead, diagnostico
-    );
+    const resposta = await this.builder.gerarResposta(historico, texto, lead, diagnostico);
+    const ok = await this.whatsapp.enviarMensagem(numero, resposta);
 
-    logger.info(`  💬 ${partes.length} parte(s) para enviar`);
-
-    // Enviar em partes com delays entre elas
-    const sucesso = await this.enviarEmPartes(numero, partes);
-
-    if (sucesso) {
-      const textoCompleto = partes.join('\n\n');
-      await db.msg(lead.id, 'enviado', textoCompleto);
-
-      if (textoCompleto.includes(process.env.CALENDLY_LINK || 'calendly')) {
+    if (ok.sucesso) {
+      await db.msg(lead.id, 'enviado', resposta);
+      logger.info(`  ✅ Resposta enviada`);
+      if (resposta.includes(process.env.CALENDLY_LINK || 'calendly')) {
         await db.update(lead.id, { status: 'link_enviado' });
         logger.info(`  🔗 Link de agendamento enviado!`);
       }
@@ -215,12 +174,9 @@ export class Orchestrator {
     else if (interesse === 'frio') await db.update(lead.id, { status: 'frio' });
   }
 
-  // ─────────────────────────────────────────────
-  //  FOLLOW-UP
-  // ─────────────────────────────────────────────
   async executarFollowUp() {
     if (!this.horarioOk()) return;
-    logger.info('\n🔄 Follow-ups...');
+    logger.info('\n🔄 Follow-ups inteligentes...');
     const leads = await db.buscarParaFollowUp();
     logger.info(`  ${leads.length} leads`);
 
@@ -249,7 +205,7 @@ export class Orchestrator {
 
   horarioOk() {
     const n = new Date(), d = n.getDay();
-    if (process.env.ALLOW_WEEKENDS !== 'true' && (d === 0 || d === 6)) return false;
+    if (d === 0 || d === 6) return false;
     const h = n.getHours();
     const [hi] = (process.env.HORARIO_INICIO || '09:00').split(':').map(Number);
     const [hf] = (process.env.HORARIO_FIM || '23:59').split(':').map(Number);

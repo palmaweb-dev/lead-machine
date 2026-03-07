@@ -952,10 +952,16 @@
         Prospecção
       </a>
       <div class="nav-section-label">Sistema</div>
-      <a href="/configuracoes" class="nav-item">
-          <i data-lucide="settings"></i>
-          Configurações
-        </a>
+      <a href="#" class="nav-item disabled" onclick="event.preventDefault()">
+        <i data-lucide="message-circle"></i>
+        WhatsApp
+        <span class="nav-badge">Em breve</span>
+      </a>
+      <a href="#" class="nav-item disabled" onclick="event.preventDefault()">
+        <i data-lucide="settings"></i>
+        Configurações
+        <span class="nav-badge">Em breve</span>
+      </a>
     </nav>
     <div class="sidebar-footer">
       <div class="sidebar-version">Lead Machine v2.0  Palmaweb</div>
@@ -1108,28 +1114,19 @@
   </div>
 
 <script>
-    // === AUTENTICAO ===
-    const API_KEY = prompt('Senha do painel:');
-    if (API_KEY === null || API_KEY.trim() === '') {
-      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:#f87171;font-family:sans-serif;font-size:1.2rem;">Acesso negado. <a href="/" style="color:#60a5fa;margin-left:8px;">Tentar novamente</a></div>';
-      throw new Error('Login cancelado pelo usurio.');
-    }
-    const h = { 'Content-Type': 'application/json', 'x-api-key': API_KEY.trim() };
+    const API_KEY = prompt('Senha do painel:') || '';
+    const h = { 'Content-Type': 'application/json', 'x-api-key': API_KEY };
 
     // Initialize Lucide icons
     lucide.createIcons();
 
     async function carregarMetricas() {
       const r = await fetch('/api/metricas', { headers: h });
-      if (r.status === 401) {
-        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0f172a;color:#f87171;font-family:sans-serif;font-size:1.2rem;">Senha incorreta. <a href="/" style="color:#60a5fa;margin-left:8px;">Tentar novamente</a></div>';
-        throw new Error('No autorizado.');
-      }
       const m = await r.json();
       document.getElementById('m-total').textContent = m.total_leads || 0;
       document.getElementById('m-enviados').textContent = m.enviados_hoje || 0;
       document.getElementById('m-respostas').textContent = m.responderam_hoje || 0;
-      document.getElementById('m-reunioes').textContent = m.reunioes_agendadas || 0;
+      document.getElementById('m-reunioes').textContent = m.reunioes_hoje || 0;
     }
 
 let paginaAtual = 0;
