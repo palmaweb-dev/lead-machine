@@ -16,7 +16,7 @@ const sb = createClient(
 );
 
 // =============================
-// BODY PARSER (corrigido)
+// BODY PARSER
 // =============================
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
@@ -48,6 +48,7 @@ app.get('/api/leads', auth, async (req, res) => {
 });
 
 app.get('/api/leads/:id/msgs', auth, async (req, res) => {
+
   const { data } = await sb
     .from('conversas')
     .select('*')
@@ -55,6 +56,7 @@ app.get('/api/leads/:id/msgs', auth, async (req, res) => {
     .order('created_at');
 
   res.json(data || []);
+
 });
 
 app.post('/api/iniciar', auth, async (req, res) => {
@@ -105,37 +107,49 @@ app.post('/webhook/whatsapp', async (req, res) => {
 
     const body = req.body;
 
+    if (!body) {
+      return res.sendStatus(200);
+    }
+
     // =============================
-    // FIX DUPLICATA UAIZAPI
+    // PARSE PRIMEIRO
+    // =============================
+    const m = orchestrator.whatsapp.parsearWebhook(body);
+
+    // =============================
+    // BLOQUEAR MENSAGEM DO PRÓPRIO BOT
+    // =============================
+    if (body?.wasSentByApi) {
+      return res.sendStatus(200);
+    }
+
+    // =============================
+    // CONTROLE DE DUPLICATA
     // =============================
     const _msgId = body?.message?.messageid || body?.data?.messageid;
 
     if (_msgId) {
 
-      if (global._uazapiMsgCache?.has(_msgId)) {
-        console.log('⚠️ Duplicata ignorada:', _msgId);
-        return res.sendStatus(200);
-      }
-
       if (!global._uazapiMsgCache) {
         global._uazapiMsgCache = new Map();
+      }
+
+      if (global._uazapiMsgCache.has(_msgId)) {
+        console.log('⚠️ Duplicata ignorada:', _msgId);
+        return res.sendStatus(200);
       }
 
       global._uazapiMsgCache.set(_msgId, Date.now());
 
       setTimeout(() => {
-        global._uazapiMsgCache?.delete(_msgId);
+        global._uazapiMsgCache.delete(_msgId);
       }, 30000);
 
     }
 
-    if (!body) {
-      return res.sendStatus(200);
-    }
-
-    // Parse usando orchestrator
-    const m = orchestrator.whatsapp.parsearWebhook(body);
-
+    // =============================
+    // PROCESSAR MENSAGEM
+    // =============================
     if (m?.texto) {
 
       console.log('📩 Mensagem recebida');
@@ -144,8 +158,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
 
       await orchestrator.processarResposta(
         m.numero,
-        m.texto,
-        m.timestamp
+        m.texto
       );
 
     } else {
@@ -221,7 +234,6 @@ app.get('/configuracoes', (req, res) => {
 // =============================
 // START SERVER
 // =============================
-
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
